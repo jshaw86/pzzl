@@ -107,7 +107,12 @@ async fn update_users_puzzle(pool: Arc<Client>, name: &str, media: &str, email: 
 // Function to create a new user
 #[debug_handler]
 async fn create_puzzle(State(state): State<AppState>, puzzle: Json<PuzzleUserSerializer>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
-    let mut created_puzzle_users: PuzzleUserSerializer = PuzzleUserSerializer{puzzle_id:None, name:"".to_string(), media:"".to_string(), users: vec![]};
+    let mut created_puzzle_users: PuzzleUserSerializer = PuzzleUserSerializer{
+        puzzle_id:puzzle.puzzle_id.clone(), 
+        name:"".to_string(), 
+        media:"".to_string(), 
+        users: vec![]
+    };
     for user in &puzzle.users {
         if created_puzzle_users.puzzle_id == None {
             let row_result = insert_users_puzzle(state.pool.clone(), &puzzle.name, &puzzle.media, &user.email).await;
