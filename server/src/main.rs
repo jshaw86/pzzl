@@ -106,40 +106,27 @@ async fn update_users_puzzle(pool: Arc<Client>, name: &str, media: &str, email: 
 
 // Function to create a new user
 #[debug_handler]
-async fn create_puzzle(State(state): State<AppState>, puzzle: Json<PuzzleUserSerializer>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
-    let mut created_puzzle_users: PuzzleUserSerializer = PuzzleUserSerializer{
-        puzzle_id:puzzle.puzzle_id.clone(), 
-        name:"".to_string(), 
-        media:"".to_string(), 
-        users: vec![]
-    };
+async fn upsert_puzzle(State(state): State<AppState>, puzzle: Json<PuzzleUserSerializer>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
+    let mut new_puzzle: Json<PuzzleUserSerializer> = puzzle.clone();
     for user in &puzzle.users {
-        if created_puzzle_users.puzzle_id == None {
-            let row_result = insert_users_puzzle(state.pool.clone(), &puzzle.name, &puzzle.media, &user.email).await;
-            created_puzzle_users = match row_result {
+        let row_result = match &puzzle.puzzle_id {
+            Some(puzzle_id) => update_users_puzzle(state.pool.clone(), &puzzle.name, &puzzle.media, &user.email, puzzle_id.as_str()).await,
+            None => insert_users_puzzle(state.pool.clone(), &puzzle.name, &puzzle.media, &user.email).await
+
+        };
+
+        match row_result {
                 Ok(puzzle_user) => puzzle_user,
                 Err(err) => {
                     println!("{}", err);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR)
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
                 }
             };
-            
-        } else {
-            let row_result = update_users_puzzle(state.pool.clone(), &puzzle.name, &puzzle.media, &user.email, &created_puzzle_users.puzzle_id.unwrap()).await;
-            created_puzzle_users = match row_result {
-                Ok(puzzle_user) => puzzle_user,
-                Err(err) => {
-                    println!("{}", err);
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR)
-                }
-            }
-
-        }
 
     }
 
-    
-    created_puzzle_users.users = match get_database_users(state.pool, &created_puzzle_users.puzzle_id.as_ref().unwrap()).await {
+    // update the cloned passed puzzle's users 
+    new_puzzle.users = match get_database_users(state.pool, &puzzle.puzzle_id.as_ref().unwrap()).await {
         Ok(users) => users,
         Err(err) => {
             println!("{}", err);
@@ -148,14 +135,14 @@ async fn create_puzzle(State(state): State<AppState>, puzzle: Json<PuzzleUserSer
 
     };
 
-    return Ok(Json(created_puzzle_users));
+    return Ok(new_puzzle);
     
 }
 
 // Function to fetch a user's profile
 #[debug_handler]
 async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
-    // Query the database for the user with the specified ID
+    // fetch the puzzle metadata 
     let row = state.pool
         .query_one("SELECT id, name, media FROM puzzles WHERE id = $1", &[&id])
         .await
@@ -172,7 +159,6 @@ async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Re
             users,
         })),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
-
     }; 
 }
 
@@ -197,7 +183,7 @@ async fn main() {
 
     // Create the Axum router
     let app = Router::new()
-        .route("/puzzles", post(create_puzzle))
+        .route("/puzzles", post(upsert_puzzle))
         .route("/puzzles/:id", get(get_puzzle))
         .with_state(state);
 
