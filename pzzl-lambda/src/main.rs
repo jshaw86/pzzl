@@ -1,30 +1,76 @@
-use lambda_http::{run, service_fn, tracing, Body, Error, Request, RequestExt, Response};
+use lambda_http::{run, tracing, Error};
+use axum::{
+    debug_handler,
+    routing::{get, post},
+    extract::{Json, State, Path},
+    http::StatusCode,
+    Router,
+};
+use pzzl_service::{PzzlService, PuzzleUserSerializer};
+use std::sync::Arc;
+use tokio_postgres::NoTls;
+use std::env::set_var;
 
-/// This is the main body for the function.
-/// Write your code inside it.
-/// There are some code example in the following URLs:
-/// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
-async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
-    // Extract some useful information from the request
-    let who = event
-        .query_string_parameters_ref()
-        .and_then(|params| params.first("name"))
-        .unwrap_or("world");
-    let message = format!("Hello {who}, this is an AWS Lambda HTTP request");
+#[derive(Clone)]
+struct AppState {
+   puzzle_service : PzzlService,
+}
 
-    // Return something that implements IntoResponse.
-    // It will be serialized to the right response event automatically by the runtime
-    let resp = Response::builder()
-        .status(200)
-        .header("content-type", "text/html")
-        .body(message.into())
-        .map_err(Box::new)?;
-    Ok(resp)
+// Function to create a new user
+#[debug_handler]
+async fn upsert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleUserSerializer>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
+    let row_result = state.puzzle_service.upsert_puzzle(puzzle).await;
+
+    return match row_result {
+        Ok(puzzle_user) => Ok(Json(puzzle_user)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    
+}
+
+// Function to fetch a user's profile
+#[debug_handler]
+async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
+    let row_result = state.puzzle_service.get_puzzle(id).await;
+
+    return match row_result {
+        Ok(result) => Ok(Json(result)),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR)
+    }; 
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    tracing::init_default_subscriber();
+    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
 
-    run(service_fn(function_handler)).await
+    // required to enable CloudWatch error logging by the runtime
+    tracing::init_default_subscriber();
+    let db_connection_str = "postgresql://postgres:mysecretpassword@localhost:5432/?connect_timeout=10";
+
+    // Connect to the PostgreSQL database
+    let (client, connection) = tokio_postgres::connect(db_connection_str, NoTls)
+        .await
+        .expect("Failed to connect to database");
+
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            println!("Failed to connect to database: {}", e);
+        }
+    });
+
+    let state = AppState{
+        puzzle_service: PzzlService { pool: Arc::new(client) }
+    };
+
+    // Create the Axum router
+    let app = Router::new()
+        .route("/puzzles", post(upsert_puzzle))
+        .route("/puzzles/:id", get(get_puzzle))
+        .with_state(state);
+
+    // Run the server
+    let _ = run(app).await;
+    Ok(())
+
 }
+
