@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     Router,
 };
-use pzzl_service::{PzzlService, PuzzleUserSerializer};
+use pzzl_service::{PzzlService, UserPuzzleSerializer};
 use std::sync::Arc;
 use tokio_postgres::NoTls;
 use std::env::set_var;
@@ -18,7 +18,7 @@ struct AppState {
 
 // Function to create a new user
 #[debug_handler]
-async fn upsert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleUserSerializer>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
+async fn upsert_puzzle(State(state): State<AppState>, Json(puzzle): Json<UserPuzzleSerializer>) -> Result<Json<UserPuzzleSerializer>, StatusCode> {
     let row_result = state.puzzle_service.upsert_puzzle(puzzle).await;
 
     return match row_result {
@@ -30,7 +30,7 @@ async fn upsert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleU
 
 // Function to fetch a user's profile
 #[debug_handler]
-async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<PuzzleUserSerializer>, StatusCode> {
+async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<UserPuzzleSerializer>, StatusCode> {
     let row_result = state.puzzle_service.get_puzzle(id).await;
 
     return match row_result {

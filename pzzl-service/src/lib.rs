@@ -10,6 +10,7 @@ mod queries;
 pub struct User {
     id: Option<i32>,
     email: String,
+    name: String,
 }
 
 // User model
@@ -21,11 +22,22 @@ pub struct Puzzle {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PuzzleUserSerializer {
+pub struct UserPuzzle{
+    user_id: i32,
+    puzzle_id: String,
+    email: String,
+    name: String,
+    lat: f32,
+    lng: f32,
+}
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserPuzzleSerializer {
     puzzle_id: Option<String>,
     name: String,
     media: String,
-    users: Vec<User>,
+    users: Vec<UserPuzzle>,
 }
 
 #[derive(Clone)]
@@ -34,19 +46,23 @@ pub struct PzzlService {
 }
 
 impl PzzlService {
-    pub async fn get_database_users(&self, puzzle_id: &str) -> Result<Vec<User>, tokio_postgres::Error> {
+    pub async fn get_database_users(&self, puzzle_id: &str) -> Result<Vec<UserPuzzle>, tokio_postgres::Error> {
         let mut users = vec![];
         let database_users_result = self.pool
-            .query_raw("SELECT u.id, u.email FROM users_puzzles AS up JOIN users AS u ON u.id = up.user_id WHERE puzzle_id = $1", &[puzzle_id])
+            .query_raw("SELECT u.id, u.email, u.name, up.lat, up.lng FROM users_puzzles AS up JOIN users AS u ON u.id = up.user_id WHERE puzzle_id = $1", &[puzzle_id])
             .await;
 
         return match database_users_result {
             Ok(database_users) => {
                 pin_mut!(database_users);
                 while let Some(row) = database_users.try_next().await.expect("failed row") {
-                    users.push(User {
-                        id: Some(row.get(0)),
+                    users.push(UserPuzzle {
+                        user_id: row.get(0),
+                        puzzle_id: puzzle_id.to_string(),
                         email: row.get(1),
+                        name: row.get(2),
+                        lat: row.get(3),
+                        lng: row.get(4),
                     });
                 }
                 return Ok(users);
@@ -56,7 +72,7 @@ impl PzzlService {
         }
     }
 
-    pub async fn insert_users_puzzle(&self, name: &str, media: &str, email: &str) -> Result<PuzzleUserSerializer, tokio_postgres::Error> {
+    pub async fn insert_users_puzzle(&self, name: &str, media: &str, email: &str) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
         // Insert the user into the database
         let row_result = self.pool
             .query_one(
@@ -66,7 +82,7 @@ impl PzzlService {
             .await;
 
         return match row_result {
-            Ok(row) =>  Ok(PuzzleUserSerializer {
+            Ok(row) =>  Ok(UserPuzzleSerializer {
                 puzzle_id: row.get(1),
                 name: row.get(2),
                 media: row.get(3),
@@ -77,7 +93,7 @@ impl PzzlService {
 
     }
 
-    pub async fn update_users_puzzle(&self, name: &str, media: &str, email: &str, puzzle_id: &str) -> Result<PuzzleUserSerializer, tokio_postgres::Error> {
+    pub async fn update_users_puzzle(&self, name: &str, media: &str, email: &str, puzzle_id: &str) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
         // Insert the user into the database
         let row_result = self.pool
             .query_one(
@@ -87,7 +103,7 @@ impl PzzlService {
             .await;
 
         return match row_result {
-            Ok(row) =>  Ok(PuzzleUserSerializer {
+            Ok(row) =>  Ok(UserPuzzleSerializer {
                 puzzle_id: row.get(1),
                 name: row.get(2),
                 media: row.get(3),
@@ -99,8 +115,8 @@ impl PzzlService {
     }
 
     // Function to create a new user
-    pub async fn upsert_puzzle(&self, puzzle: PuzzleUserSerializer) -> Result<PuzzleUserSerializer, tokio_postgres::Error> {
-        let mut new_puzzle: PuzzleUserSerializer = puzzle.clone();
+    pub async fn upsert_puzzle(&self, puzzle: UserPuzzleSerializer) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
+        let mut new_puzzle: UserPuzzleSerializer = puzzle.clone();
         for user in &puzzle.users {
             let row_result = match &puzzle.puzzle_id {
                 Some(puzzle_id) => self.update_users_puzzle(&puzzle.name, &puzzle.media, &user.email, puzzle_id.as_str()).await,
@@ -131,7 +147,7 @@ impl PzzlService {
     }
 
     // Function to fetch a user's profile
-    pub async fn get_puzzle(&self, id: String) -> Result<PuzzleUserSerializer, tokio_postgres::Error> {
+    pub async fn get_puzzle(&self, id: String) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
         // fetch the puzzle metadata 
         let row = self.pool
             .query_one("SELECT id, name, media FROM puzzles WHERE id = $1", &[&id])
@@ -142,7 +158,7 @@ impl PzzlService {
         let puzzle_id: &String = &row.get(0);
 
         return match self.get_database_users(puzzle_id).await {
-            Ok(users) => Ok(PuzzleUserSerializer {
+            Ok(users) => Ok(UserPuzzleSerializer {
                 puzzle_id: Some(puzzle_id.to_string()),
                 name: row.get(1),
                 media: row.get(2),

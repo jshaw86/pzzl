@@ -53,6 +53,7 @@ $$;
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email varchar(255),
+    name text,
     UNIQUE(email)
 );
 
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS puzzles (
 CREATE TABLE IF NOT EXISTS users_puzzles ( 
     user_id SERIAL,
     puzzle_id text,
+    lat decimal,
+    lng decimal,
     PRIMARY KEY(user_id, puzzle_id)
 );
 
