@@ -10,6 +10,19 @@ use pzzl_service::{PzzlService, UserPuzzleSerializer};
 use std::sync::Arc;
 use tokio_postgres::NoTls;
 use std::env::set_var;
+use clap::Parser;
+
+#[derive(Debug, Parser)]
+pub struct Config {
+    #[clap(long, env)]
+    database_url: String,
+    #[clap(long, env)]
+    database_user: String,
+    #[clap(long, env)]
+    database_password: String,
+    #[clap(long, env)]
+    database_timeout: u8,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -42,13 +55,15 @@ async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Re
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+    let conf = Config::parse();
 
     // required to enable CloudWatch error logging by the runtime
     tracing::init_default_subscriber();
-    let db_connection_str = "postgresql://postgres:mysecretpassword@localhost:5432/?connect_timeout=10";
+    let db_connection_str = format!("postgresql://{user}:{password}@{url}/?connect_timeout={timeout}", 
+                                    user=conf.database_user, password=conf.database_password, url=conf.database_url, timeout=conf.database_timeout);
 
     // Connect to the PostgreSQL database
-    let (client, connection) = tokio_postgres::connect(db_connection_str, NoTls)
+    let (client, connection) = tokio_postgres::connect(&db_connection_str, NoTls)
         .await
         .expect("Failed to connect to database");
 

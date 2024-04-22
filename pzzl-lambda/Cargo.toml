@@ -22,3 +22,4 @@ serde = { version = "1.0.197", features = ["derive"] }
 tokio = { version= "1.36.0", features = ["full"] }
 tokio-postgres = "0.7.10"
 pzzl-service = { path = "../pzzl-service" }
+clap = { version = "4.5.4", features = ["env", "derive"] }
