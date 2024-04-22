@@ -55,10 +55,11 @@ async fn get_puzzle(State(state): State<AppState>, Path(id): Path<String>) -> Re
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
-    let conf = Config::parse();
-
     // required to enable CloudWatch error logging by the runtime
     tracing::init_default_subscriber();
+
+    let conf = Config::parse();
+
     let db_connection_str = format!("postgresql://{user}:{password}@{url}/?connect_timeout={timeout}", 
                                     user=conf.database_user, password=conf.database_password, url=conf.database_url, timeout=conf.database_timeout);
 

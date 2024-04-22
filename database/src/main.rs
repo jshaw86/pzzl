@@ -1,15 +1,33 @@
 use std::error::Error;
 use tokio;
 use tokio_postgres::NoTls;
+use clap::Parser;
+
 
 mod embedded {
     use refinery::embed_migrations;
     embed_migrations!("migrations");
 }
+
+#[derive(Debug, Parser)]
+pub struct Config {
+    #[clap(long, env)]
+    database_url: String,
+    #[clap(long, env)]
+    database_user: String,
+    #[clap(long, env)]
+    database_password: String,
+    #[clap(long, env)]
+    database_timeout: u8,
+}
+
 #[tokio::main]
 async fn main() {
-    let connection_str = "postgresql://postgres:mysecretpassword@localhost:5432?connect_timeout=10";
-    let _ = run_migrations(connection_str.to_string()).await.expect("migration failed");
+    let conf = Config::parse();
+
+    let db_connection_str = format!("postgresql://{user}:{password}@{url}/?connect_timeout={timeout}", 
+                                    user=conf.database_user, password=conf.database_password, url=conf.database_url, timeout=conf.database_timeout);
+    let _ = run_migrations(db_connection_str.to_string()).await.expect("migration failed");
 
 }
 
