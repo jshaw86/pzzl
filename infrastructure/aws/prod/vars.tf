@@ -28,9 +28,3 @@ variable "rds_username" {
 variable "rds_password" {
   type    = string
 }
-
-variable "pzzl_lambda_version" {
-  type    = string
-  default = "lastest"
-
-}
