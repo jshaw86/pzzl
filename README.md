@@ -10,11 +10,11 @@
 `docker run --name pzzl -p 127.0.0.1:5432:5432  -e POSTGRES_PASSWORD=mysecretpassword -e POSTGRES_USER=postgres -e POSTGRES_DB=pzzl -d postgres`
 
 Run database migration
-- `cd pzzl/database`
+- `cd pzzl/pzzl-database`
 - `cargo run` 
 
 Run server  
-- `cd pzzl/server` 
+- `cd pzzl/pzzl-server` 
 - `RUST_BACKTRACE=1 cargo run`
 
 Restart database
