@@ -21,14 +21,38 @@ resource "aws_iam_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+data "aws_subnet" "lambda_subnet_primary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_primary"]
+  }
+}
+
+data "aws_subnet" "lambda_subnet_secondary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_secondary"]
+  }
+}
+
+
+data "aws_security_group" "lambda_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_sg"]
+  }
+
+}
+
 resource "aws_lambda_function" "pzzl_database_function" {
   function_name = "pzzl-server-${var.env_name}"
-  timeout       = 5 # seconds
+  timeout       = 90 # seconds
   image_uri     = "${var.repository_url}:${var.image_version}"
   package_type  = "Image"
   architectures    = ["arm64"]
 
   role = aws_iam_role.pzzl_database_role.arn
+
 
   environment {
     variables = {
