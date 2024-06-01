@@ -43,4 +43,5 @@ variable "database_timeout" {
 
 variable "schedule_time" {
     type = string
+    default = "cron(0 20 25 5 ? 2024)" # cron(minute hour day month ? year)
 }

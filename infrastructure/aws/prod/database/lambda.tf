@@ -26,6 +26,7 @@ resource "aws_lambda_function" "pzzl_database_function" {
   timeout       = 5 # seconds
   image_uri     = "${var.repository_url}:${var.image_version}"
   package_type  = "Image"
+  architectures    = ["arm64"]
 
   role = aws_iam_role.pzzl_database_role.arn
 
@@ -35,13 +36,14 @@ resource "aws_lambda_function" "pzzl_database_function" {
       DATABASE_USER = var.database_user
       DATABASE_PASSWORD = var.database_password
       DATABASE_TIMEOUT = var.database_timeout
+      DB_CA_CERT="/etc/ssl/certs/rds-ca-cert.pem" # hardcoded in the dockerfile
     }
   }
 }
 
 resource "aws_cloudwatch_event_rule" "once_rule" {
   name                = "one-time-event"
-  schedule_expression = var.schedule_time # "cron(0 20 10 4 ? 2024)" # This cron runs at 20:00 on 10-Apr-2024 UTC
+  schedule_expression = var.schedule_time 
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
