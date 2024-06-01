@@ -18,16 +18,46 @@ resource "aws_iam_role" "pzzl_database_role" {
 resource "aws_iam_policy_attachment" "lambda_logs" {
   name       = "pzzl_database_logs"
   roles      = [aws_iam_role.pzzl_database_role.name]
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+data "aws_subnet" "lambda_subnet_primary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_primary"]
+  }
+}
+
+data "aws_subnet" "lambda_subnet_secondary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_secondary"]
+  }
+}
+
+
+data "aws_security_group" "lambda_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_sg"]
+  }
+
 }
 
 resource "aws_lambda_function" "pzzl_database_function" {
   function_name = "pzzl-server-${var.env_name}"
-  timeout       = 5 # seconds
+  timeout       = 90 # seconds
   image_uri     = "${var.repository_url}:${var.image_version}"
   package_type  = "Image"
+  architectures    = ["arm64"]
+
+  vpc_config {
+    subnet_ids         = [data.aws_subnet.lambda_subnet_primary.id, data.aws_subnet.lambda_subnet_secondary.id]
+    security_group_ids = [data.aws_security_group.lambda_sg.id]
+  }
 
   role = aws_iam_role.pzzl_database_role.arn
+
 
   environment {
     variables = {
@@ -35,13 +65,14 @@ resource "aws_lambda_function" "pzzl_database_function" {
       DATABASE_USER = var.database_user
       DATABASE_PASSWORD = var.database_password
       DATABASE_TIMEOUT = var.database_timeout
+      DB_CA_CERT="/etc/ssl/certs/rds-ca-cert.pem" # hardcoded in the dockerfile
     }
   }
 }
 
 resource "aws_cloudwatch_event_rule" "once_rule" {
   name                = "one-time-event"
-  schedule_expression = var.schedule_time # "cron(0 20 10 4 ? 2024)" # This cron runs at 20:00 on 10-Apr-2024 UTC
+  schedule_expression = var.schedule_time 
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {

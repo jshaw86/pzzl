@@ -22,6 +22,10 @@ resource "aws_subnet" "lambda_subnet_primary" {
 
   map_public_ip_on_launch = true
   availability_zone = data.aws_availability_zones.available.names[0]
+
+   tags = {
+       Name = "lambda_subnet_primary"
+   }
 }
 
 resource "aws_subnet" "lambda_subnet_secondary" {
@@ -30,6 +34,10 @@ resource "aws_subnet" "lambda_subnet_secondary" {
 
   map_public_ip_on_launch = true
   availability_zone = data.aws_availability_zones.available.names[1]
+
+  tags = {
+      Name = "lambda_subnet_secondary"
+  }
 }
 
 resource "aws_security_group" "lambda_sg" {
@@ -43,6 +51,10 @@ resource "aws_security_group" "lambda_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+      Name = "lambda_sg"
+  }
 }
 
 resource "aws_db_instance" "pzzl_database" {
@@ -51,9 +63,9 @@ resource "aws_db_instance" "pzzl_database" {
   engine              = "postgres"
   instance_class      = "db.t3.micro"
   allocated_storage   = 20
-  db_name               = var.rds_name
-  username              = var.rds_username
-  password              = var.rds_password
+  db_name               = var.database_name
+  username              = var.database_user
+  password              = var.database_password
   skip_final_snapshot  = true
   apply_immediately = true
 
@@ -77,8 +89,8 @@ resource "aws_security_group" "rds_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 3306 // Change this if using a different DB or port
-    to_port     = 3306
+    from_port   = 5432 // Change this if using a different DB or port
+    to_port     = 5432
     protocol    = "tcp"
     security_groups = [aws_security_group.lambda_sg.id]
   }
