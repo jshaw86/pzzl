@@ -1,13 +1,30 @@
-FROM rust:1.77-buster as builder
-WORKDIR /build
-RUN apt update && apt install -y musl-tools musl-dev
-RUN apt-get install -y build-essential gcc-x86-64-linux-gnu
-RUN rustup target add x86_64-unknown-linux-musl
-COPY . . 
-ENV RUSTFLAGS='-C linker=x86_64-linux-gnu-gcc'
-RUN cargo build --release --target x86_64-unknown-linux-musl
+FROM rust:1.77 AS builder
 
-# copy artifacts to a clean image
-FROM public.ecr.aws/lambda/provided:al2
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/database /bootstrap
-ENTRYPOINT ["/bootstrap"]
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    musl-tools \
+    && apt-get clean
+
+# Create a new user and switch to it
+RUN useradd -m rustuser
+USER rustuser
+WORKDIR /home/rustuser
+
+# Copy the project files
+COPY --chown=rustuser:rustuser . .
+
+# Build the project for ARM architecture
+RUN rustup target add aarch64-unknown-linux-musl
+RUN cargo build --release --target aarch64-unknown-linux-musl
+
+# Second stage: create a small image with the compiled binary
+FROM arm64v8/alpine:latest
+
+# Install dependencies
+RUN apk --no-cache add ca-certificates
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /home/rustuser/target/aarch64-unknown-linux-musl/release/database /usr/local/bin/my_lambda
+
+# Command to run the binary
+CMD ["/usr/local/bin/my_lambda"]
