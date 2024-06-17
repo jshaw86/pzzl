@@ -2,3 +2,4 @@ pzzl-database/target
 pzzl-server/target
 pzzl-lambda/target
 pzzl-service/target
+.terraform

@@ -57,21 +57,56 @@ resource "aws_security_group" "lambda_sg" {
   }
 }
 
-resource "aws_db_instance" "pzzl_database" {
-  identifier = "pzzl-db"
+resource "aws_dynamodb_table" "users" {
+    name           = "users"
+    read_capacity  = 5
+    write_capacity = 5
+    hash_key       = "id"
+    range_key      = "email"
 
-  engine              = "postgres"
-  instance_class      = "db.t3.micro"
-  allocated_storage   = 20
-  db_name               = var.database_name
-  username              = var.database_user
-  password              = var.database_password
-  skip_final_snapshot  = true
-  apply_immediately = true
+    attribute {
+        name = "id"
+        type = "N"
+    }
+
+    attribute {
+        name = "email"
+        type = "S"
+    }
+
+}
+
+resource "aws_dynamodb_table" "puzzles" {
+    name           = "puzzles"
+    read_capacity  = 5
+    write_capacity = 5
+    hash_key       = "id"
+
+    attribute {
+        name = "id"
+        type = "S"
+    }
+
+}
 
 
-  vpc_security_group_ids = [aws_security_group.rds_sg.id]
-  db_subnet_group_name = aws_db_subnet_group.subnet_group.name
+resource "aws_dynamodb_table" "puzzles_users" {
+    name           = "puzzles_users"
+    read_capacity  = 5
+    write_capacity = 5
+    hash_key       = "puzzle_id"
+    range_key      = "user_id"
+
+    attribute {
+        name = "user_id"
+        type = "S"
+    }
+
+    attribute {
+        name = "puzzle_id"
+        type = "S"
+    }
+
 }
 
 resource "aws_db_subnet_group" "subnet_group" {

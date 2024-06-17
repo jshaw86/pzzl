@@ -1,172 +1,170 @@
-use serde::{Deserialize, Serialize};
+pub mod types;
+mod util;
+use serde_dynamo::to_item;
 use std::sync::Arc;
-use tokio_postgres::Client;
-use futures_util::{pin_mut, TryStreamExt}; 
-
-mod queries;
-
-// User model
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct User {
-    id: Option<i32>,
-    email: String,
-    name: String,
-}
-
-// User model
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Puzzle {
-    id: String,
-    name: String,
-    media: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct UserPuzzle{
-    user_id: i32,
-    puzzle_id: String,
-    email: String,
-    name: String,
-    lat: f32,
-    lng: f32,
-}
-
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct UserPuzzleSerializer {
-    puzzle_id: Option<String>,
-    name: String,
-    media: String,
-    users: Vec<UserPuzzle>,
-}
+use std::collections::HashMap;
+use aws_sdk_dynamodb::Client;
+use aws_sdk_dynamodb::types::{AttributeValue, KeysAndAttributes, TransactWriteItem, Put};
+use anyhow::{Error, Result};
+use crate::types::{User, Puzzle, PuzzleSerializer, PuzzleUserSerializer, PuzzleUser};
 
 #[derive(Clone)]
 pub struct PzzlService {
    pub pool: Arc<Client>
 }
 
+const PUZZLE_PK_LENGTH: usize = 8;
+const MAX_PUZZLE_INSERT_TRYS: usize = 10;
+
 impl PzzlService {
-    pub async fn get_database_users(&self, puzzle_id: &str) -> Result<Vec<UserPuzzle>, tokio_postgres::Error> {
-        let mut users = vec![];
-        let database_users_result = self.pool
-            .query_raw("SELECT u.id, u.email, u.name, up.lat, up.lng FROM users_puzzles AS up JOIN users AS u ON u.id = up.user_id WHERE puzzle_id = $1", &[puzzle_id])
-            .await;
 
-        return match database_users_result {
-            Ok(database_users) => {
-                pin_mut!(database_users);
-                while let Some(row) = database_users.try_next().await.expect("failed row") {
-                    users.push(UserPuzzle {
-                        user_id: row.get(0),
-                        puzzle_id: puzzle_id.to_string(),
-                        email: row.get(1),
-                        name: row.get(2),
-                        lat: row.get(3),
-                        lng: row.get(4),
-                    });
-                }
-                return Ok(users);
-            },
-            Err(err) => Err(err)
+    pub async fn add_user(&self, puzzle_id: String, puzzle_user: PuzzleUserSerializer) -> Result<PuzzleSerializer> {
+        let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
+        let suser = to_item(&User::from(&mutable_puzzle_user))?;
+        let puzzle_user_db = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
+        let suser_puzzle = to_item(&puzzle_user_db)?;
 
-        }
-    }
+        let _ = self.pool
+            .transact_write_items()
+            .transact_items(
+                TransactWriteItem::builder()
+                .put(Put::builder().table_name("puzzles_users")
+                     .set_item(Some(suser_puzzle))
+                     .build()?).build())
+            .transact_items(
+                TransactWriteItem::builder()
+                .put(Put::builder().table_name("puzzles_users")
+                     .set_item(Some(suser))
+                     .build()?).build())
+            .send().await?;
 
-    pub async fn insert_users_puzzle(&self, name: &str, media: &str, email: &str) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
-        // Insert the user into the database
-        let row_result = self.pool
-            .query_one(
-                queries::INSERT_USERS_PUZZLE_STATEMENT,
-                &[&name, &media, &email],
-                )
-            .await;
-
-        return match row_result {
-            Ok(row) =>  Ok(UserPuzzleSerializer {
-                puzzle_id: row.get(1),
-                name: row.get(2),
-                media: row.get(3),
-                users: vec![],
-            }),
-            Err(err) => Err(err) 
-        }
-
-    }
-
-    pub async fn update_users_puzzle(&self, name: &str, media: &str, email: &str, puzzle_id: &str) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
-        // Insert the user into the database
-        let row_result = self.pool
-            .query_one(
-                queries::UPDATE_USERS_PUZZLE_STATEMENT,
-                &[&name, &media, &email, &puzzle_id],
-                )
-            .await;
-
-        return match row_result {
-            Ok(row) =>  Ok(UserPuzzleSerializer {
-                puzzle_id: row.get(1),
-                name: row.get(2),
-                media: row.get(3),
-                users: vec![],
-            }),
-            Err(err) => Err(err) 
-        }
+        Ok(self.get_puzzle(puzzle_id).await?)
 
     }
 
     // Function to create a new user
-    pub async fn upsert_puzzle(&self, puzzle: UserPuzzleSerializer) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
-        let mut new_puzzle: UserPuzzleSerializer = puzzle.clone();
-        for user in &puzzle.users {
-            let row_result = match &puzzle.puzzle_id {
-                Some(puzzle_id) => self.update_users_puzzle(&puzzle.name, &puzzle.media, &user.email, puzzle_id.as_str()).await,
-                None => self.insert_users_puzzle(&puzzle.name, &puzzle.media, &user.email).await
+    pub async fn insert_puzzle(&self, puzzle: PuzzleSerializer) -> Result<PuzzleSerializer> {  
+        let mut mutable_puzzle = puzzle.clone();
+        let mut transact_write_requests: Vec<TransactWriteItem> = vec![];
+        let puzzle_id = util::generate_string(PUZZLE_PK_LENGTH);
+        mutable_puzzle.puzzle_id = Some(puzzle_id.clone());
 
-            };
+        let spuzzle = to_item(&Puzzle::from(&mutable_puzzle))?;
 
-            match row_result {
-                Ok(puzzle_user) => puzzle_user,
-                Err(err) => {
-                    return Err(err) 
-                }
-            };
+        transact_write_requests.push(
+            TransactWriteItem::builder()
+            .put(
+                Put::builder().table_name("puzzles_users")
+                .condition_expression("pk <> :pk")
+                .expression_attribute_values(":pk", AttributeValue::S(types::to_puzzle_pk(&puzzle_id)))
+                .set_item(Some(spuzzle)).build()?
+                ).build()
+            );
+
+        for puzzle_user in &puzzle.users {
+            let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
+            let suser = to_item(&User::from(&mutable_puzzle_user))?;
+
+            transact_write_requests.push(
+                TransactWriteItem::builder()
+                .put(Put::builder().table_name("puzzles_users")
+                     .set_item(Some(suser))
+                     .build()?).build());
+
+            let user_puzzle = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
+            let suser_puzzle = to_item(&user_puzzle)?;
+  
+            transact_write_requests.push(
+                TransactWriteItem::builder()
+                .put(Put::builder().table_name("puzzles_users")
+                     .set_item(Some(suser_puzzle))
+                     .build()?).build());
 
         }
+        
+        let mut insert_trys = 0;
+        loop {
+            let transact_write_item = self.pool
+                .transact_write_items()
+                .set_transact_items(Some(transact_write_requests.clone()))
+                .send().await;
 
-        // update the cloned passed puzzle's users 
-        new_puzzle.users = match self.get_database_users(&puzzle.puzzle_id.as_ref().unwrap()).await {
-            Ok(users) => users,
-            Err(err) => {
-                return Err(err)
+            if let Ok(_) = transact_write_item {
+                break;
             }
 
-        };
+            if insert_trys > MAX_PUZZLE_INSERT_TRYS {
+                return Err(Error::msg("could not find a unique puzzle id, try again later")); 
+            }
 
-        return Ok(new_puzzle);
+            insert_trys += 1;
+        }
+
+
+        Ok(self.get_puzzle(puzzle_id).await?)
 
     }
-
     // Function to fetch a user's profile
-    pub async fn get_puzzle(&self, id: String) -> Result<UserPuzzleSerializer, tokio_postgres::Error> {
-        // fetch the puzzle metadata 
-        let row = self.pool
-            .query_one("SELECT id, name, media FROM puzzles WHERE id = $1", &[&id])
-            .await
-            .expect("Failed to fetch user");
+    pub async fn get_puzzle(&self, puzzle_id: String) -> Result<PuzzleSerializer> {
+        let puzzle_users_result = self.get_puzzle_and_puzzle_users(&puzzle_id).await;
 
+        if let Err(err) = puzzle_users_result {
+            eprintln!("err {:?}", err);
+            return Err(err);
+        }
 
-        let puzzle_id: &String = &row.get(0);
+        let (puzzle, puzzle_users) = puzzle_users_result.unwrap();
 
-        return match self.get_database_users(puzzle_id).await {
-            Ok(users) => Ok(UserPuzzleSerializer {
-                puzzle_id: Some(puzzle_id.to_string()),
-                name: row.get(1),
-                media: row.get(2),
-                users,
-            }),
-            Err(err) => Err(err) 
-        }; 
+        let user_responses = self.get_users(&puzzle_users).await;
+
+        if let Err(err) = user_responses {
+            return Err(err);
+        }
+
+        let users: HashMap<String, User> = user_responses.unwrap().into_iter().map(|u| (u.pk.clone(), u)).collect();
+
+        let puzzle_users_response: Vec<PuzzleUserSerializer> = types::make_puzzle_user_serializers(&users, &puzzle_users); 
+
+        let mut puzzle_response: PuzzleSerializer = PuzzleSerializer::from(&puzzle);
+        puzzle_response.users = puzzle_users_response;
+        Ok(puzzle_response)
+
     }
 
-}
+    async fn get_puzzle_and_puzzle_users(&self, puzzle_id: &String) -> Result<(Puzzle, Vec<PuzzleUser>)>{
+        let batch_result = self.pool 
+            .execute_statement()
+            .statement(format!(
+                    r#"SELECT * FROM "{}" WHERE "{}" = ?"#,
+                    "puzzles_users", "pk" 
+                    ))
+            .set_parameters(Some(vec![AttributeValue::S(types::to_puzzle_pk(puzzle_id))]))
+            .send()
+            .await?;
 
+        Ok(util::parse_puzzle_puzzle_users(&batch_result)?)
+
+    }
+
+    async fn get_users(&self, puzzle_users: &Vec<PuzzleUser>) -> Result<Vec<User>> {
+        let db_user_pks: Vec<HashMap<String, AttributeValue>> = puzzle_users.into_iter()
+            .map(|u| HashMap::from([
+                                   ("pk".to_string(), AttributeValue::S(u.sk.clone())),
+                                   ("sk".to_string(), AttributeValue::S(u.sk.clone()))
+            ])).collect();
+
+        eprintln!("PKS {:?}", db_user_pks);
+
+        let users_query = KeysAndAttributes::builder()
+            .set_keys(Some(db_user_pks))
+            .build()?;
+
+        let items = self.pool.batch_get_item()
+            .request_items("puzzles_users",users_query)
+            .send()
+            .await?;
+
+        return util::parse_users(&items);
+
+    }
+}
