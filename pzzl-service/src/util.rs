@@ -1,4 +1,3 @@
-use rand::Rng;
 use rand::distributions::Alphanumeric;
 use rand::distributions::DistString;
 use anyhow::{Error, Result};

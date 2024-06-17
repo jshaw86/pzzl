@@ -109,7 +109,6 @@ impl PzzlService {
         let puzzle_users_result = self.get_puzzle_and_puzzle_users(&puzzle_id).await;
 
         if let Err(err) = puzzle_users_result {
-            eprintln!("err {:?}", err);
             return Err(err);
         }
 
@@ -152,8 +151,6 @@ impl PzzlService {
                                    ("pk".to_string(), AttributeValue::S(u.sk.clone())),
                                    ("sk".to_string(), AttributeValue::S(u.sk.clone()))
             ])).collect();
-
-        eprintln!("PKS {:?}", db_user_pks);
 
         let users_query = KeysAndAttributes::builder()
             .set_keys(Some(db_user_pks))
