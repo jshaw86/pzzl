@@ -100,7 +100,10 @@ async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
         Some(url) =>  aws_config::defaults(BehaviorVersion::latest())
                 .endpoint_url(url)
                 .load().await,
-        None => aws_config::load_defaults(BehaviorVersion::latest()).await 
+        None => {
+            eprintln!("loading dynamo from env...");
+            aws_config::load_from_env().await
+        }
     };
     
 
@@ -110,17 +113,19 @@ async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    eprintln!("starting up...");
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     // required to enable CloudWatch error logging by the runtime
     tracing::init_default_subscriber();
 
     let conf = Config::parse();
 
+    eprintln!("initialize dynamo client...");
     let client = dynamo_client(&conf.dynamo_endpoint).await;
 
     let resp = client.list_tables().send().await?;
 
-    println!("Found {} tables", resp.table_names().len());
+    eprintln!("Found {} tables", resp.table_names().len());
 
     let state = AppState{
         puzzle_service: PzzlService { pool: Arc::new(client) }
@@ -139,7 +144,9 @@ async fn main() -> Result<(), Error> {
             axum::serve(listener, app).await.unwrap();
         }
         None => {
-            let _ = run(app).await;
+            eprintln!("running dynamo app...");
+            let resp = run(app).await;
+            eprintln!("dynamo app resp {:?}", resp);
         }
     }
     Ok(())

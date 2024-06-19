@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 resource "aws_iam_role" "pzzl_lambda_role" {
   name = "pzzl_lambda_execution_role"
 
@@ -44,6 +46,34 @@ data "aws_security_group" "lambda_sg" {
 
 }
 
+resource "aws_iam_policy" "lambda_dynamodb_policy" {
+  name = "lambda_dynamodb_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:ListTables"
+        ]
+        Resource = "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
+  role       = aws_iam_role.pzzl_lambda_role.name
+  policy_arn = aws_iam_policy.lambda_dynamodb_policy.arn
+}
+
 resource "aws_lambda_function" "pzzl_lambda_function" {
   function_name = "pzzl-server-${var.env_name}"
   timeout       = 90 # seconds
@@ -58,11 +88,9 @@ resource "aws_lambda_function" "pzzl_lambda_function" {
 
   role = aws_iam_role.pzzl_lambda_role.arn
 
-
-  environment {
-    variables = {
-      
-    }
-  }
 }
+
+
+
+
 
