@@ -57,77 +57,23 @@ resource "aws_security_group" "lambda_sg" {
   }
 }
 
-resource "aws_dynamodb_table" "users" {
-    name           = "users"
-    read_capacity  = 5
-    write_capacity = 5
-    hash_key       = "id"
-    range_key      = "email"
-
-    attribute {
-        name = "id"
-        type = "N"
-    }
-
-    attribute {
-        name = "email"
-        type = "S"
-    }
-
-}
-
-resource "aws_dynamodb_table" "puzzles" {
-    name           = "puzzles"
-    read_capacity  = 5
-    write_capacity = 5
-    hash_key       = "id"
-
-    attribute {
-        name = "id"
-        type = "S"
-    }
-
-}
-
-
 resource "aws_dynamodb_table" "puzzles_users" {
     name           = "puzzles_users"
     read_capacity  = 5
     write_capacity = 5
-    hash_key       = "puzzle_id"
-    range_key      = "user_id"
+    hash_key       = "pk"
+    range_key       = "sk"
 
     attribute {
-        name = "user_id"
+        name = "pk"
         type = "S"
     }
 
     attribute {
-        name = "puzzle_id"
+        name = "sk"
         type = "S"
     }
 
 }
 
-resource "aws_db_subnet_group" "subnet_group" {
-  name       = "my-db-subnet-group"
-  subnet_ids = [aws_subnet.lambda_subnet_primary.id, aws_subnet.lambda_subnet_secondary.id]
-
-  tags = {
-    Name = "My DB subnet group"
-  }
-}
-
-resource "aws_security_group" "rds_sg" {
-  name        = "rds_sg"
-  description = "Security group for RDS instance"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 5432 // Change this if using a different DB or port
-    to_port     = 5432
-    protocol    = "tcp"
-    security_groups = [aws_security_group.lambda_sg.id]
-  }
-}
 
