@@ -6,6 +6,10 @@ resource "aws_ecr_repository" "pzzl_database_repository" {
   name = "pzzl/database"
 }
 
+data "aws_route_table" "main_vpc_route_tables" {
+  vpc_id = aws_vpc.main.id 
+}
+
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   enable_dns_support = true
@@ -17,9 +21,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
   service_name = "com.amazonaws.${var.region}.dynamodb"
   vpc_endpoint_type = "Gateway"
 
-  route_table_ids = [
-    aws_route_table.main.id
-  ]
+  route_table_ids = data.aws_route_table.main_vpc_route_tables[*].id 
 
 }
 
