@@ -1,13 +1,23 @@
-FROM rust:1.77-buster as builder
-WORKDIR /build
-RUN apt update && apt install -y musl-tools musl-dev
-RUN apt-get install -y build-essential gcc-x86-64-linux-gnu
-RUN rustup target add x86_64-unknown-linux-musl
-COPY . . 
-ENV RUSTFLAGS='-C linker=x86_64-linux-gnu-gcc'
-RUN cd pzzl-lambda && cargo build --release --target x86_64-unknown-linux-musl
+FROM rust:1.77 AS builder
 
-# copy artifacts to a clean image
-FROM public.ecr.aws/lambda/provided:al2
-COPY --from=builder /build/pzzl-lambda/target/x86_64-unknown-linux-musl/release/pzzl-lambda /bootstrap
-ENTRYPOINT ["/bootstrap"]
+# Install dependencies
+RUN apt-get update && apt-get install -y musl-tools curl && apt-get clean
+
+# Create a new user and switch to it
+WORKDIR /build
+
+COPY . .
+
+# Build the project for ARM architecture
+RUN rustup target add aarch64-unknown-linux-musl
+RUN cd pzzl-lambda && cargo build --release --target aarch64-unknown-linux-musl
+RUN ls -la /build/pzzl-lambda/target/aarch64-unknown-linux-musl/release
+
+# Second stage: create a small image with the compiled binary
+FROM arm64v8/alpine:latest
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /build/pzzl-lambda/target/aarch64-unknown-linux-musl/release/pzzl-lambda /usr/local/bin/my_lambda
+
+# Command to run the binary
+CMD ["/usr/local/bin/my_lambda"]

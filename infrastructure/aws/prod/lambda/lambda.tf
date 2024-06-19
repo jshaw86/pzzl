@@ -18,23 +18,51 @@ resource "aws_iam_role" "pzzl_lambda_role" {
 resource "aws_iam_policy_attachment" "lambda_logs" {
   name       = "pzzl_lambda_logs"
   roles      = [aws_iam_role.pzzl_lambda_role.name]
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+data "aws_subnet" "lambda_subnet_primary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_primary"]
+  }
+}
+
+data "aws_subnet" "lambda_subnet_secondary" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_subnet_secondary"]
+  }
+}
+
+
+data "aws_security_group" "lambda_sg" {
+  filter {
+    name   = "tag:Name"
+    values = ["lambda_sg"]
+  }
+
 }
 
 resource "aws_lambda_function" "pzzl_lambda_function" {
   function_name = "pzzl-server-${var.env_name}"
-  timeout       = 5 # seconds
-  image_uri     = "${var.repository_url}:${var.version}"
+  timeout       = 90 # seconds
+  image_uri     = "${var.repository_url}:${var.image_version}"
   package_type  = "Image"
+  architectures    = ["arm64"]
+
+  vpc_config {
+    subnet_ids         = [data.aws_subnet.lambda_subnet_primary.id, data.aws_subnet.lambda_subnet_secondary.id]
+    security_group_ids = [data.aws_security_group.lambda_sg.id]
+  }
 
   role = aws_iam_role.pzzl_lambda_role.arn
 
+
   environment {
     variables = {
-      DATABASE_URL = var.database_url
-      DATABASE_USER = var.database_user
-      DATABASE_PASSWORD = var.database_user
-      DATABASE_TIMEOUT = var.database_timeout
+      
     }
   }
 }
+
