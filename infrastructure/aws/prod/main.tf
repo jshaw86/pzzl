@@ -8,6 +8,11 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
 }
 
+resource "aws_internet_gateway" "main_internet_gateway" {
+  vpc_id = aws_vpc.main.id
+}
+
+
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id       = aws_vpc.main.id
   service_name = "com.amazonaws.${var.region}.dynamodb"
@@ -15,19 +20,6 @@ resource "aws_vpc_endpoint" "dynamodb" {
 
   route_table_ids = data.aws_route_table.main_vpc_route_tables[*].id 
 
-}
-
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-}
-
-resource "aws_route_table" "main" {
-  vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
-  }
 }
 
 data "aws_availability_zones" "available" {
@@ -68,6 +60,13 @@ resource "aws_security_group" "lambda_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+ ingress {
+    from_port   = 80 
+    to_port     = 80 
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -99,5 +98,28 @@ resource "aws_dynamodb_table" "puzzles_users" {
 
 }
 
+resource "aws_lb" "lambda_lb" {
+  name               = "lambda-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.lambda_sg.id]
+  subnets            = [aws_subnet.lambda_subnet_primary.id, aws_subnet.lambda_subnet_secondary.id]
 
+  enable_deletion_protection = false
+}
 
+resource "aws_lb_target_group" "lambda_lb_target_group" {
+  name        = "lambda-lb-target-group"
+  target_type = "lambda"
+  vpc_id      = aws_vpc.main.id 
+}
+
+resource "aws_lb_listener" "lambda_lb_80_listener" {
+  load_balancer_arn = aws_lb.lambda_lb.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lambda_lb_target_group.arn
+  }
+}

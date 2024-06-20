@@ -90,7 +90,23 @@ resource "aws_lambda_function" "pzzl_lambda_function" {
 
 }
 
+data "aws_lb_target_group" "lambda-lb-target-group" {
+    name="lambda-lb-target-group"
+}
+
+resource "aws_lambda_permission" "lambda_lb_permission" {
+  statement_id  = "AllowExecutionFromALB"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pzzl_lambda_function.function_name
+  principal     = "elasticloadbalancing.amazonaws.com"
+  source_arn    = data.aws_lb_target_group.lambda-lb-target-group.arn
+}
 
 
 
+resource "aws_lb_target_group_attachment" "lambda_lb_target_group_attachment" {
+  target_group_arn = data.aws_lb_target_group.lambda-lb-target-group.arn
+  target_id        = aws_lambda_function.pzzl_lambda_function.arn
+  depends_on       = [aws_lambda_permission.lambda_lb_permission]
+}
 
