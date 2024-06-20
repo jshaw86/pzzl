@@ -123,3 +123,19 @@ resource "aws_lb_listener" "lambda_lb_80_listener" {
     target_group_arn = aws_lb_target_group.lambda_lb_target_group.arn
   }
 }
+
+resource "aws_lb_listener_rule" "static" {
+  listener_arn = aws_lb_listener.lambda_lb_80_listener.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lambda_lb_target_group.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/health"]
+    }
+  }
+}
