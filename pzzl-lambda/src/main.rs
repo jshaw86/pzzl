@@ -1,6 +1,8 @@
 use aws_config::BehaviorVersion;
+use lambda_http::request::RequestContext::Alb;
 use aws_sdk_dynamodb::Client;
-use lambda_http::{run, tracing, Error};
+use lambda_http;
+use lambda_http::{tracing, Error};
 use axum::{
     debug_handler,
     routing::{get, put},
@@ -10,7 +12,7 @@ use axum::{
     http::StatusCode
 };
 use std::sync::Arc;
-use std::env::set_var;
+//use std::env::set_var;
 use serde::Serialize;
 use clap::Parser;
 use pzzl_service::{PzzlService, types::PuzzleUserSerializer};
@@ -59,6 +61,14 @@ where
     fn from(err: E) -> Self {
         Self(err.into())
     }
+}
+
+async fn mw_sample(req: axum::extract::Request, next: axum::middleware::Next) -> impl axum::response::IntoResponse {
+    let context = req.extensions().get::<lambda_http::request::RequestContext>();
+    if let Some(Alb(ctx)) = context {
+        tracing::info!("context = {:?}", ctx);
+    }
+    next.run(req).await
 }
 
 #[debug_handler]
@@ -114,7 +124,7 @@ async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     eprintln!("starting up...");
-    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+    //set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     // required to enable CloudWatch error logging by the runtime
     tracing::init_default_subscriber();
 
@@ -133,9 +143,11 @@ async fn main() -> Result<(), Error> {
 
     // Create the Axum router
     let app = Router::new()
+        .route("/health", get(|| async { "Hello, World!" }))
         .route("/puzzles", put(insert_puzzle))
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
+        .route_layer(axum::middleware::from_fn(mw_sample))
         .with_state(state);
 
     match conf.dynamo_endpoint {
@@ -145,7 +157,7 @@ async fn main() -> Result<(), Error> {
         }
         None => {
             eprintln!("running dynamo app...");
-            let resp = run(app).await;
+            let resp = lambda_http::run(app).await;
             eprintln!("dynamo app resp {:?}", resp);
         }
     }

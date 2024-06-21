@@ -61,7 +61,7 @@ impl PzzlService {
                 ).build()
             );
 
-        for puzzle_user in &puzzle.users {
+        for puzzle_user in &puzzle.stamps {
             let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
             let suser = to_item(&User::from(&mutable_puzzle_user))?;
 
@@ -125,7 +125,7 @@ impl PzzlService {
         let puzzle_users_response: Vec<PuzzleUserSerializer> = types::make_puzzle_user_serializers(&users, &puzzle_users); 
 
         let mut puzzle_response: PuzzleSerializer = PuzzleSerializer::from(&puzzle);
-        puzzle_response.users = puzzle_users_response;
+        puzzle_response.stamps = puzzle_users_response;
         Ok(puzzle_response)
 
     }

@@ -8,6 +8,9 @@ use uuid::Uuid;
 use crate::types::PuzzleUserSerializer;
 use crate::types::{User, Puzzle, PuzzleUser};
 
+
+
+
 pub fn fill_user_id(puzzle_user: &PuzzleUserSerializer) -> PuzzleUserSerializer {
     match puzzle_user.user.user_id {
         Some(_) => puzzle_user.clone(),
