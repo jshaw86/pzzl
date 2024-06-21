@@ -7,8 +7,8 @@ use axum::{
     extract::{Json, Path, FromRequest, State},
     Router,
     response::{IntoResponse, Response},
-    http::{HeaderValue, StatusCode},
-    http::header::CONTENT_TYPE,
+    http::{Method, HeaderValue, StatusCode},
+    http::header::{ACCESS_CONTROL_ALLOW_HEADERS, CONTENT_TYPE},
 };
 use std::sync::Arc;
 use std::env::set_var;
@@ -139,7 +139,7 @@ async fn main() -> Result<(), Error> {
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
-               .allow_methods(Any)
+               .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::HEAD ])
                .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
                .allow_headers([CONTENT_TYPE]))
         .with_state(state);
