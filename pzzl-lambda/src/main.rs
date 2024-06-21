@@ -7,8 +7,8 @@ use axum::{
     extract::{Json, Path, FromRequest, State},
     Router,
     response::{IntoResponse, Response},
-    http::{Method, HeaderValue, StatusCode},
-    http::header::{ACCESS_CONTROL_ALLOW_HEADERS, CONTENT_TYPE},
+    http::{HeaderValue, StatusCode},
+    http::header::CONTENT_TYPE,
 };
 use std::sync::Arc;
 use std::env::set_var;
@@ -19,11 +19,14 @@ use pzzl_service::types::PuzzleSerializer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+const DOMAIN: &str = "https://puzzlepassport.com";
 
 #[derive(Debug, Parser)]
 pub struct Config {
     #[clap(long, env)]
     dynamo_endpoint: Option<String>,
+    #[clap(long, env)]
+    cors_origin: Option<String>,
 }
 
 #[derive(Clone)]
@@ -114,6 +117,15 @@ async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
 
 }
 
+fn allowed_origin(cors_origin: Option<String>) -> HeaderValue {
+    let allowed_origin: String = match cors_origin {
+        Some(origin) => origin,
+        None => DOMAIN.to_string(),
+        
+    };
+   allowed_origin.parse::<HeaderValue>().unwrap()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     eprintln!("starting up...");
@@ -122,13 +134,9 @@ async fn main() -> Result<(), Error> {
 
     let conf = Config::parse();
 
-    match conf.dynamo_endpoint {
-        Some(_) => tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::DEBUG)
-    .init(),
-        None => tracing::init_default_subscriber()
-    };
-
+    tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .init();
 
     eprintln!("initialize dynamo client...");
     let client = dynamo_client(&conf.dynamo_endpoint).await;
@@ -148,8 +156,8 @@ async fn main() -> Result<(), Error> {
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
-               .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::HEAD ])
-               .allow_origin("http://localhost:8000".parse::<HeaderValue>().unwrap())
+               .allow_methods(Any)
+               .allow_origin(allowed_origin(conf.cors_origin))
                .allow_headers([CONTENT_TYPE]))
         .layer(TraceLayer::new_for_http())
         .with_state(state);

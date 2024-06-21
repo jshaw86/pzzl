@@ -15,7 +15,7 @@
 
 ## Run server  
 - `cd pzzl/pzzl-lambda` 
-- `DYNAMO_ENDPOINT=http://localhost:4566 cargo run`
+- `CORS_ORIGIN=http://localhost:8000 DYNAMO_ENDPOINT=http://localhost:4566 cargo run`
 
 ## Useful Curls
 - Insert first puzzle/user `curl -v -H "content-type:application/json" -X PUT -d '{"puzzle_id":"thing4", "name":"namething2", "media":"some media2", "users":[{"user":{"user_id": "3", "email":"thing email2", "name":"some user name2"}, "lat":63.31, "lng":32.80}]}' http://localhost:8089/puzzles
@@ -29,5 +29,6 @@
 - table scan `aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name puzzles_users`
 
 
- python -m http.server 8000
+## python simple server with index.html
+from the project root `python -m http.server 8000`
 
