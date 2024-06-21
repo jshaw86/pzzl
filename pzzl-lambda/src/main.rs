@@ -135,7 +135,8 @@ async fn main() -> Result<(), Error> {
 
     // Create the Axum router
     let app = Router::new()
-        .route("/puzzles", put(insert_puzzle))
+        .route("/health", get(|| async { "Hello, World!" }))
+        .route("/puzzles", put(insert_puzzle).options(|| async { "Hello, World!" }))
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
