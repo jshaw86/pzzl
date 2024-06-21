@@ -17,6 +17,7 @@ use clap::Parser;
 use pzzl_service::{PzzlService, types::PuzzleUserSerializer};
 use pzzl_service::types::PuzzleSerializer;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
 
 
 #[derive(Debug, Parser)]
@@ -118,9 +119,16 @@ async fn main() -> Result<(), Error> {
     eprintln!("starting up...");
     set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     // required to enable CloudWatch error logging by the runtime
-    tracing::init_default_subscriber();
 
     let conf = Config::parse();
+
+    match conf.dynamo_endpoint {
+        Some(_) => tracing_subscriber::fmt()
+    .with_max_level(tracing::Level::DEBUG)
+    .init(),
+        None => tracing::init_default_subscriber()
+    };
+
 
     eprintln!("initialize dynamo client...");
     let client = dynamo_client(&conf.dynamo_endpoint).await;
@@ -136,14 +144,16 @@ async fn main() -> Result<(), Error> {
     // Create the Axum router
     let app = Router::new()
         .route("/health", get(|| async { "Hello, World!" }))
-        .route("/puzzles", put(insert_puzzle).options(|| async { "Hello, World!" }))
+        .route("/puzzles", put(insert_puzzle))
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::HEAD ])
-               .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+               .allow_origin("http://localhost:8000".parse::<HeaderValue>().unwrap())
                .allow_headers([CONTENT_TYPE]))
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
+
 
     match conf.dynamo_endpoint {
         Some(_) => {

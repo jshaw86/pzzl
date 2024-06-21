@@ -27,3 +27,7 @@
 
 ## aws cli
 - table scan `aws --endpoint-url=http://localhost:4566 dynamodb scan --table-name puzzles_users`
+
+
+ python -m http.server 8000
+

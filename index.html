@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XHR PUT Request</title>
+</head>
+<body>
+    <h1>XHR PUT Request Example</h1>
+    <button id="sendRequest">Send PUT Request</button>
+
+    <script>
+        document.getElementById('sendRequest').addEventListener('click', function() {
+            // Create a new XMLHttpRequest object
+            var xhr = new XMLHttpRequest();
+
+            // Configure it: PUT-request for the URL
+            xhr.open('PUT', 'http://localhost:8089/puzzles', true);
+
+            // Set the request header
+            xhr.setRequestHeader('Content-Type', 'application/json');
+
+            // Define the data to be sent
+            var data = JSON.stringify({
+                name: "namething4",
+                media: "some media4",
+                users: [{
+                    user: {
+                        email: "thing email4",
+                        name: "some user name4"
+                    },
+                    lat: 63.31,
+                    lng: 32.80
+                }]
+            });
+
+            // Setup the callback function for when the request completes
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) { // Request is complete
+                    if (xhr.status === 200) { // Success
+                        console.log('Response:', xhr.responseText);
+                    } else { // Error
+                        console.error('Error:', xhr.status, xhr.statusText);
+                    }
+                }
+            };
+
+            // Send the request with the data
+            xhr.send(data);
+        });
+    </script>
+</body>
+</html>
+
