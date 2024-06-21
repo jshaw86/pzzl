@@ -7,8 +7,7 @@ use axum::{
     extract::{Json, Path, FromRequest, State},
     Router,
     response::{IntoResponse, Response},
-    http::{Method, StatusCode},
-    http::header::CONTENT_TYPE
+    http::StatusCode,
 };
 use std::sync::Arc;
 use std::env::set_var;
@@ -139,9 +138,9 @@ async fn main() -> Result<(), Error> {
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
-               .allow_methods([Method::GET, Method::PUT, Method::POST])
+               .allow_methods(Any)
                .allow_origin(Any)
-               .allow_headers([CONTENT_TYPE]))
+               .allow_headers(Any))
         .with_state(state);
 
     match conf.dynamo_endpoint {
