@@ -8,7 +8,7 @@ use axum::{
     Router,
     response::{IntoResponse, Response},
     http::{HeaderValue, StatusCode},
-    http::header::CONTENT_TYPE
+    http::header::CONTENT_TYPE,
 };
 use std::sync::Arc;
 use std::env::set_var;
@@ -139,6 +139,7 @@ async fn main() -> Result<(), Error> {
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/users", put(add_user))
         .layer(CorsLayer::new()
+               .allow_methods(Any)
                .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
                .allow_headers([CONTENT_TYPE]))
         .with_state(state);
