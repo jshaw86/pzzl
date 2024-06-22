@@ -8,6 +8,8 @@ use uuid::Uuid;
 use crate::types::PuzzleUserSerializer;
 use crate::types::{User, Puzzle, PuzzleUser};
 
+
+
 pub fn fill_owned(puzzle_user: &PuzzleUserSerializer, owned: bool) -> PuzzleUserSerializer {
     let mut obj = puzzle_user.clone();
     obj.user.owned = owned;

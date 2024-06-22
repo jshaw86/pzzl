@@ -4,20 +4,45 @@ use serde_dynamo::to_item;
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::time::SystemTime;
-use aws_sdk_dynamodb::Client;
+use aws_sdk_s3::Client as S3Client;
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::presigning::PresigningConfig;
+use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_dynamodb::types::{AttributeValue, KeysAndAttributes, TransactWriteItem, Put};
 use anyhow::{Error, Result};
 use crate::types::{User, Puzzle, PuzzleSerializer, PuzzleUserSerializer, PuzzleUser, FillDates};
+use core::time::Duration;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct PzzlService {
-   pub pool: Arc<Client>
+   pub dynamo_client: Arc<DynamoClient>,
+   pub s3_client: Arc<S3Client>
 }
 
 const PUZZLE_PK_LENGTH: usize = 6;
 const MAX_PUZZLE_INSERT_TRYS: usize = 10;
 
 impl PzzlService {
+
+    pub async fn get_media_url(&self, prefix: String, bucket_name: String) -> Result<String> {
+        let expiration = Duration::from_secs(15 * 60);
+        let object_key = format!("{}-{}", prefix, Uuid::new_v4().to_string()); 
+
+        // Create a PutObjectRequest
+        let req = self.s3_client
+            .put_object()
+            .bucket(bucket_name)
+            .key(object_key)
+            .body(ByteStream::from_static(b""));
+
+        // Configure the presigned request with expiration time
+        let presigning_config = PresigningConfig::expires_in(expiration)?;
+
+        // Generate the presigned URL
+        let presigned_req = req.presigned(presigning_config).await?;
+        return Ok(presigned_req.uri().to_string());
+    }
 
     pub async fn add_stamps(&self, puzzle_id: String, puzzle_users: Vec<PuzzleUserSerializer>) -> Result<PuzzleSerializer> {
         let mut write_items = vec![];
@@ -42,7 +67,7 @@ impl PzzlService {
 
         }
 
-        let _ = self.pool
+        let _ = self.dynamo_client
         .transact_write_items()
         .set_transact_items(Some(write_items))
                     .send().await?;
@@ -94,7 +119,7 @@ impl PzzlService {
             }
 
             let mut insert_trys = 0;
-            let transact_write_item = self.pool
+            let transact_write_item = self.dynamo_client
                 .transact_write_items()
                 .set_transact_items(Some(transact_write_requests.clone()))
                 .send().await;
@@ -139,7 +164,7 @@ impl PzzlService {
     }
 
     async fn get_puzzle_and_puzzle_users(&self, puzzle_id: &String) -> Result<(Puzzle, Vec<PuzzleUser>)>{
-        let batch_result = self.pool 
+        let batch_result = self.dynamo_client 
             .execute_statement()
             .statement(format!(
                     r#"SELECT * FROM "{}" WHERE "{}" = ?"#,
@@ -164,7 +189,7 @@ impl PzzlService {
             .set_keys(Some(db_user_pks))
             .build()?;
 
-        let items = self.pool.batch_get_item()
+        let items = self.dynamo_client.batch_get_item()
             .request_items("puzzles_users",users_query)
             .send()
             .await?;

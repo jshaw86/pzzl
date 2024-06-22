@@ -1,5 +1,6 @@
 use aws_config::BehaviorVersion;
-use aws_sdk_dynamodb::Client;
+use aws_sdk_dynamodb::Client as DynamoClient;
+use aws_sdk_s3::Client as S3Client;
 use anyhow::Error as AnyError;
 use lambda_http;
 use lambda_http::{tracing, Error as LambdaError};
@@ -21,20 +22,25 @@ use pzzl_service::types::PuzzleSerializer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+
 const DOMAIN: &str = "https://puzzlepassport.com";
+const DEFAULT_BUCKET: &str = "media";
 const MAX_STAMPS_PER_REQ: usize = 4;
 
 #[derive(Debug, Parser)]
 pub struct Config {
     #[clap(long, env)]
-    dynamo_endpoint: Option<String>,
+    aws_endpoint: Option<String>,
     #[clap(long, env)]
     cors_origin: Option<String>,
+    #[clap(long, env)]
+    bucket_name: Option<String>,
 }
 
 #[derive(Clone)]
 struct AppState {
    puzzle_service : PzzlService,
+   bucket_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,24 +55,13 @@ struct AppJson<T>(T);
 
 struct AppError(anyhow::Error);
 
-// Tell axum how to convert `AppError` into a response.
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse{
-                status_code: StatusCode::BAD_REQUEST.into(),
-                message: format!("{}", self.0)
-            }),
-        ).into_response()
-    }
-}
-impl<E> From<E> for AppError
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(err: E) -> Self {
-        Self(err.into())
+#[debug_handler]
+async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) -> Result<String, AppError> {
+    let result = state.puzzle_service.get_media_url(prefix, state.bucket_name).await;
+
+    match result {
+        Ok(s) => Ok(s),
+        Err(e) => Err(AppError(e)),
     }
 }
 
@@ -110,8 +105,8 @@ async fn get_puzzle(State(state): State<AppState>, Path(puzzle_id): Path<String>
     }; 
 }
 
-async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
-    let config = match dynamo_endpoint {
+async fn dynamo_client(aws_endpoint: &Option<String> ) -> DynamoClient {
+    let config = match aws_endpoint {
         Some(url) =>  aws_config::defaults(BehaviorVersion::latest())
                 .endpoint_url(url)
                 .load().await,
@@ -122,7 +117,23 @@ async fn dynamo_client(dynamo_endpoint: &Option<String> ) -> Client {
     };
     
 
-    return Client::new(&config);
+    return DynamoClient::new(&config);
+
+}
+
+async fn s3_client(aws_endpoint: &Option<String> ) -> S3Client {
+    let config = match aws_endpoint {
+        Some(url) =>  aws_config::defaults(BehaviorVersion::latest())
+                .endpoint_url(url)
+                .load().await,
+        None => {
+            eprintln!("loading dynamo from env...");
+            aws_config::load_from_env().await
+        }
+    };
+    
+
+    return S3Client::new(&config);
 
 }
 
@@ -148,19 +159,31 @@ async fn main() -> Result<(), LambdaError> {
             .init();
 
     eprintln!("initialize dynamo client...");
-    let client = dynamo_client(&conf.dynamo_endpoint).await;
+    let dynamo_client = dynamo_client(&conf.aws_endpoint).await;
+    let s3_client = s3_client(&conf.aws_endpoint).await;
 
-    let resp = client.list_tables().send().await?;
+    let resp = dynamo_client.list_tables().send().await?;
+
+    let bucket_name = match conf.bucket_name {
+        Some(bucket_name) => Some(bucket_name),
+        None => Some(DEFAULT_BUCKET.to_string()),
+    };
 
     eprintln!("Found {} tables", resp.table_names().len());
 
     let state = AppState{
-        puzzle_service: PzzlService { pool: Arc::new(client) }
+        puzzle_service: PzzlService { 
+            dynamo_client: Arc::new(dynamo_client), 
+                s3_client: Arc::new(s3_client),
+
+        },
+        bucket_name: bucket_name.unwrap(),
     };
 
     // Create the Axum router
     let app = Router::new()
         .route("/health", get(|| async { "Hello, World!" }))
+        .route("/media/:prefix", get(media_url))
         .route("/puzzles", put(insert_puzzle))
         .route("/puzzles/:puzzle_id", get(get_puzzle))
         .route("/puzzles/:puzzle_id/stamps", put(add_stamps))
@@ -172,7 +195,7 @@ async fn main() -> Result<(), LambdaError> {
         .with_state(state);
 
 
-    match conf.dynamo_endpoint {
+    match conf.aws_endpoint {
         Some(_) => {
             let listener = tokio::net::TcpListener::bind("0.0.0.0:8089").await.unwrap();
             axum::serve(listener, app).await.unwrap();
@@ -187,3 +210,24 @@ async fn main() -> Result<(), LambdaError> {
 
 }
 
+
+// Tell axum how to convert `AppError` into a response.
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse{
+                status_code: StatusCode::BAD_REQUEST.into(),
+                message: format!("{}", self.0)
+            }),
+        ).into_response()
+    }
+}
+impl<E> From<E> for AppError
+where
+    E: Into<anyhow::Error>,
+{
+    fn from(err: E) -> Self {
+        Self(err.into())
+    }
+}
