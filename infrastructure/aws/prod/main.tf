@@ -1,11 +1,3 @@
-resource "aws_ecr_repository" "pzzl_lambda_repository" {
-  name = "pzzl/lambda"
-}
-
-resource "aws_ecr_repository" "pzzl_database_repository" {
-  name = "pzzl/database"
-}
-
 data "aws_route_table" "main_vpc_route_tables" {
   vpc_id = aws_vpc.main.id 
 }
@@ -46,7 +38,6 @@ resource "aws_subnet" "lambda_subnet_primary" {
   vpc_id     = aws_vpc.main.id
   cidr_block = "10.0.1.0/24"
 
-  map_public_ip_on_launch = true
   availability_zone = data.aws_availability_zones.available.names[0]
 
    tags = {
@@ -58,7 +49,6 @@ resource "aws_subnet" "lambda_subnet_secondary" {
   vpc_id     = aws_vpc.main.id
   cidr_block = "10.0.2.0/24"
 
-  map_public_ip_on_launch = true
   availability_zone = data.aws_availability_zones.available.names[1]
 
   tags = {
@@ -108,5 +98,6 @@ resource "aws_dynamodb_table" "puzzles_users" {
     }
 
 }
+
 
 
