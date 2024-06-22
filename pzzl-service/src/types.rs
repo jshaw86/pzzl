@@ -1,11 +1,22 @@
 use std::{convert::From, time::SystemTime};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use chrono::prelude::{DateTime, Utc};
 
 const PUZZLE_PREFIX: &str = "PUZZLE";
 //const PUZZLE_USER_PREFIX: &str = "PUZZLEUSER";
 const USER_PREFIX: &str = "USER";
 const DB_SEPARATOR: &str = "#";
+
+pub trait FillDates {
+    fn fill_dates(&self, d: Option<SystemTime>) -> Self;
+}
+
+fn rfc3339(st: &SystemTime) -> String {
+    let dt: DateTime<Utc> = st.clone().into();
+    dt.to_rfc3339() 
+    
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PuzzleSerializer {
@@ -13,19 +24,46 @@ pub struct PuzzleSerializer {
     pub name: String,
     pub media: String,
     pub num_pieces: u16,
-    pub inserted: Option<SystemTime>,
-    pub updated: Option<SystemTime>,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
     pub stamps: Vec<PuzzleUserSerializer>,
+}
+
+impl FillDates for PuzzleSerializer {
+   fn fill_dates(&self, inserted: Option<SystemTime>) -> Self {
+        let mut obj = self.clone();
+        obj.inserted = match inserted {
+            Some(date) => Some(rfc3339(&date)),
+            None => obj.inserted 
+        };
+        obj.updated = Some(rfc3339(&SystemTime::now()));
+        obj.stamps = obj.stamps.into_iter().map(|pu: PuzzleUserSerializer| pu.fill_dates(inserted)).collect();
+        return obj;
+   } 
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserSerializer {
     pub user_id: Option<String>,
     pub email: String,
-    pub name: String,   
+    pub name: String,
     pub owned: bool,
-    pub inserted: Option<SystemTime>,
-    pub updated: Option<SystemTime>,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
+}
+
+impl FillDates for UserSerializer {
+    fn fill_dates(&self, inserted: Option<SystemTime>) -> Self {
+        let mut obj = self.clone();
+        obj.inserted = match inserted {
+            Some(date) => Some(rfc3339(&date)),
+            None => obj.inserted 
+        };
+        obj.updated = Some(rfc3339(&SystemTime::now()));
+        return obj;
+    } 
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -38,8 +76,23 @@ pub struct PuzzleUserSerializer{
     pub media: Option<String>,
     pub lat: f32,
     pub lng: f32,
-    pub inserted: Option<SystemTime>,
-    pub updated: Option<SystemTime>,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
+}
+
+impl FillDates for PuzzleUserSerializer {
+    fn fill_dates(&self, inserted: Option<SystemTime>) -> Self {
+        let mut obj = self.clone();
+        obj.inserted = match inserted {
+            Some(date) => Some(rfc3339(&date)),
+            None => obj.inserted 
+        };
+        obj.updated = Some(rfc3339(&SystemTime::now()));
+
+        obj.user = obj.user.fill_dates(inserted);
+        return obj;
+    }
+
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -49,8 +102,8 @@ pub struct Puzzle {
     pub name: String,
     pub media: String,
     pub num_pieces: u16,
-    pub inserted: SystemTime,
-    pub updated: SystemTime,
+    pub inserted: String,
+    pub updated: String,
 }
 
 // User model
@@ -61,8 +114,8 @@ pub struct User {
     pub email: String,
     pub name: String,   
     pub owned: bool,
-    pub inserted: SystemTime,
-    pub updated: SystemTime,
+    pub inserted: String,
+    pub updated: String,
 }
 
 // User model
@@ -77,8 +130,8 @@ pub struct PuzzleUser{
     pub media: Option<String>,
     pub lat: f32,
     pub lng: f32,
-    pub inserted: SystemTime,
-    pub updated: SystemTime,
+    pub inserted: String,
+    pub updated: String,
 }
 
 pub fn from_database_hash(hash: &String) -> String {
@@ -109,8 +162,8 @@ impl From<(&String, &PuzzleUserSerializer)> for PuzzleUser {
             media: puzzle_user.media.clone(),
             lat: puzzle_user.lat,
             lng: puzzle_user.lng,
-            inserted: puzzle_user.inserted.unwrap(),
-            updated: puzzle_user.updated.unwrap(),
+            inserted: puzzle_user.inserted.clone().unwrap(),
+            updated: puzzle_user.updated.clone().unwrap(),
         }
     }
 }
@@ -126,8 +179,8 @@ pub fn make_puzzle_user(puzzle_user: &PuzzleUserSerializer, puzzle_id: &String) 
         media: puzzle_user.media.clone(),
         lat: puzzle_user.lat,
         lng: puzzle_user.lng,
-        inserted: puzzle_user.inserted.unwrap(),
-        updated: puzzle_user.updated.unwrap(),
+        inserted: puzzle_user.inserted.clone().unwrap(),
+        updated: puzzle_user.updated.clone().unwrap(),
     }
 }
 
@@ -152,8 +205,8 @@ impl From<(&User, &PuzzleUser)> for PuzzleUserSerializer {
             media: puzzle_user.media.clone(),
             lat: puzzle_user.lat, 
             lng: puzzle_user.lng, 
-            inserted: Some(puzzle_user.inserted),
-            updated: Some(puzzle_user.updated),
+            inserted: Some(puzzle_user.inserted.clone()),
+            updated: Some(puzzle_user.updated.clone()),
         }
 
     }
@@ -181,8 +234,8 @@ impl From<&PuzzleUserSerializer> for User {
             email: item.user.email.clone(),
             name: item.user.name.clone(),
             owned: item.user.owned.clone(),
-            inserted: item.inserted.unwrap(),
-            updated: item.updated.unwrap(),
+            inserted: item.inserted.clone().unwrap(),
+            updated: item.updated.clone().unwrap(),
         }
     }
 
@@ -197,8 +250,8 @@ impl From<&PuzzleSerializer> for Puzzle {
             name: item.name.clone(),
             media: item.media.clone(),
             num_pieces: item.num_pieces.clone(),
-            inserted: item.inserted.unwrap(),
-            updated: item.updated.unwrap(),
+            inserted: item.inserted.clone().unwrap(),
+            updated: item.updated.clone().unwrap(),
         }
     }
 }

@@ -8,27 +8,17 @@ use uuid::Uuid;
 use crate::types::PuzzleUserSerializer;
 use crate::types::{User, Puzzle, PuzzleUser};
 
-
-
-
 pub fn fill_user_id(puzzle_user: &PuzzleUserSerializer) -> PuzzleUserSerializer {
     match puzzle_user.user.user_id {
         Some(_) => puzzle_user.clone(),
         None => {
-            let user_id = generate_user_id();
+            let user_id = Uuid::new_v4().to_string();
             let mut new_puzzle_user = puzzle_user.clone();
             new_puzzle_user.user.user_id = Some(user_id);
             new_puzzle_user
         }
-
     }
-
 }
-
-pub fn generate_user_id() -> String {
-   Uuid::new_v4().to_string() 
-}
-
 
 pub fn generate_string(length: usize) -> String {
     let mut rng = rand::thread_rng();
