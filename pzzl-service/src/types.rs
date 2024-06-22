@@ -60,6 +60,7 @@ impl FillDates for UserSerializer {
             Some(date) => Some(rfc3339(&date)),
             None => obj.inserted 
         };
+        
         obj.updated = Some(rfc3339(&SystemTime::now()));
         return obj;
     } 

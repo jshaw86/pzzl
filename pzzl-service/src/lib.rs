@@ -14,30 +14,38 @@ pub struct PzzlService {
    pub pool: Arc<Client>
 }
 
-const PUZZLE_PK_LENGTH: usize = 8;
+const PUZZLE_PK_LENGTH: usize = 6;
 const MAX_PUZZLE_INSERT_TRYS: usize = 10;
 
 impl PzzlService {
 
-    pub async fn add_user(&self, puzzle_id: String, puzzle_user: PuzzleUserSerializer) -> Result<PuzzleSerializer> {
-        let mutable_puzzle_user = util::fill_user_id(&puzzle_user.fill_dates(None)); 
-        let suser = to_item(&User::from(&mutable_puzzle_user))?;
-        let puzzle_user_db = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
-        let suser_puzzle = to_item(&puzzle_user_db)?;
-
-        let _ = self.pool
-            .transact_write_items()
-            .transact_items(
+    pub async fn add_stamps(&self, puzzle_id: String, puzzle_users: Vec<PuzzleUserSerializer>) -> Result<PuzzleSerializer> {
+        let mut write_items = vec![];
+        for puzzle_user in puzzle_users {
+            let mutable_puzzle_user = util::fill_owned(&util::fill_user_id(&puzzle_user.fill_dates(Some(SystemTime::now()))), false);
+            let suser = to_item(&User::from(&mutable_puzzle_user))?;
+            let puzzle_user_db = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
+            let suser_puzzle = to_item(&puzzle_user_db)?;
+            write_items.push(
                 TransactWriteItem::builder()
                 .put(Put::builder().table_name("puzzles_users")
                      .set_item(Some(suser_puzzle))
-                     .build()?).build())
-            .transact_items(
+                     .build()?
+                    ).build());
+
+            write_items.push(
                 TransactWriteItem::builder()
                 .put(Put::builder().table_name("puzzles_users")
                      .set_item(Some(suser))
-                     .build()?).build())
-            .send().await?;
+                     .build()?
+                    ).build());
+
+        }
+
+        let _ = self.pool
+        .transact_write_items()
+        .set_transact_items(Some(write_items))
+                    .send().await?;
 
         Ok(self.get_puzzle(puzzle_id).await?)
 
@@ -46,63 +54,62 @@ impl PzzlService {
     // Function to create a new user
     pub async fn insert_puzzle(&self, puzzle: PuzzleSerializer) -> Result<PuzzleSerializer> {  
         let mut mutable_puzzle = puzzle.fill_dates(Some(SystemTime::now()));
-        let mut transact_write_requests: Vec<TransactWriteItem> = vec![];
-        let puzzle_id = util::generate_string(PUZZLE_PK_LENGTH);
-        mutable_puzzle.puzzle_id = Some(puzzle_id.clone());
 
-        let spuzzle = to_item(&Puzzle::from(&mutable_puzzle))?;
-
-        transact_write_requests.push(
-            TransactWriteItem::builder()
-            .put(
-                Put::builder().table_name("puzzles_users")
-                .condition_expression("pk <> :pk")
-                .expression_attribute_values(":pk", AttributeValue::S(types::to_puzzle_pk(&puzzle_id)))
-                .set_item(Some(spuzzle)).build()?
-                ).build()
-            );
-
-        for puzzle_user in &mutable_puzzle.stamps {
-            let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
-            let suser = to_item(&User::from(&mutable_puzzle_user))?;
-
-            transact_write_requests.push(
-                TransactWriteItem::builder()
-                .put(Put::builder().table_name("puzzles_users")
-                     .set_item(Some(suser))
-                     .build()?).build());
-
-            let user_puzzle = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
-            let suser_puzzle = to_item(&user_puzzle)?;
-  
-            transact_write_requests.push(
-                TransactWriteItem::builder()
-                .put(Put::builder().table_name("puzzles_users")
-                     .set_item(Some(suser_puzzle))
-                     .build()?).build());
-
-        }
-        
-        let mut insert_trys = 0;
         loop {
+            let mut transact_write_requests: Vec<TransactWriteItem> = vec![];
+            let puzzle_id = util::generate_string(PUZZLE_PK_LENGTH);
+            mutable_puzzle.puzzle_id = Some(puzzle_id.clone());
+
+            let spuzzle = to_item(&Puzzle::from(&mutable_puzzle))?;
+
+            transact_write_requests.push(
+                TransactWriteItem::builder()
+                .put(
+                    Put::builder().table_name("puzzles_users")
+                    .condition_expression("pk <> :pk")
+                    .expression_attribute_values(":pk", AttributeValue::S(types::to_puzzle_pk(&puzzle_id)))
+                    .set_item(Some(spuzzle)).build()?
+                    ).build()
+                );
+
+            for puzzle_user in &mutable_puzzle.stamps {
+                let mutable_puzzle_user = util::fill_owned(&util::fill_user_id(&puzzle_user), true); 
+                let suser = to_item(&User::from(&mutable_puzzle_user))?;
+
+                transact_write_requests.push(
+                    TransactWriteItem::builder()
+                    .put(Put::builder().table_name("puzzles_users")
+                         .set_item(Some(suser))
+                         .build()?).build());
+
+                let user_puzzle = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
+                let suser_puzzle = to_item(&user_puzzle)?;
+
+                transact_write_requests.push(
+                    TransactWriteItem::builder()
+                    .put(Put::builder().table_name("puzzles_users")
+                         .set_item(Some(suser_puzzle))
+                         .build()?).build());
+
+            }
+
+            let mut insert_trys = 0;
             let transact_write_item = self.pool
                 .transact_write_items()
                 .set_transact_items(Some(transact_write_requests.clone()))
                 .send().await;
 
             if let Ok(_) = transact_write_item {
-                break;
+                return Ok(self.get_puzzle(puzzle_id).await?);
             }
+
+            insert_trys += 1;
 
             if insert_trys > MAX_PUZZLE_INSERT_TRYS {
                 return Err(Error::msg("could not find a unique puzzle id, try again later")); 
             }
 
-            insert_trys += 1;
         }
-
-
-        Ok(self.get_puzzle(puzzle_id).await?)
 
     }
     // Function to fetch a user's profile

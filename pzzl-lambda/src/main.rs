@@ -1,7 +1,8 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client;
+use anyhow::Error as AnyError;
 use lambda_http;
-use lambda_http::{tracing, Error};
+use lambda_http::{tracing, Error as LambdaError};
 use axum::{
     debug_handler,
     routing::{get, put},
@@ -21,6 +22,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 const DOMAIN: &str = "https://puzzlepassport.com";
+const MAX_STAMPS_PER_REQ: usize = 4;
 
 #[derive(Debug, Parser)]
 pub struct Config {
@@ -69,8 +71,11 @@ where
 }
 
 #[debug_handler]
-async fn add_user(State(state): State<AppState>, Path(puzzle_id): Path<String>, Json(puzzle_user): Json<PuzzleUserSerializer>) -> Result<Json<PuzzleSerializer>, AppError> {
-    let puzzle_result = state.puzzle_service.add_user(puzzle_id, puzzle_user).await;
+async fn add_stamps(State(state): State<AppState>, Path(puzzle_id): Path<String>, Json(puzzle_users): Json<Vec<PuzzleUserSerializer>>) -> Result<Json<PuzzleSerializer>, AppError> {
+    if puzzle_users.len() > MAX_STAMPS_PER_REQ {
+        return Err(AppError(AnyError::msg("too many stamps")));
+    }
+    let puzzle_result = state.puzzle_service.add_stamps(puzzle_id, puzzle_users).await;
 
     return match puzzle_result {
         Ok(puzzle) => Ok(Json(puzzle)),
@@ -82,6 +87,9 @@ async fn add_user(State(state): State<AppState>, Path(puzzle_id): Path<String>, 
 // Function to create a new user
 #[debug_handler]
 async fn insert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleSerializer>) -> Result<Json<PuzzleSerializer>, AppError> {
+    if puzzle.stamps.len() > MAX_STAMPS_PER_REQ {
+        return Err(AppError(AnyError::msg("too many stamps")));
+    }
     let puzzle_result = state.puzzle_service.insert_puzzle(puzzle).await;
 
     return match puzzle_result {
@@ -128,7 +136,7 @@ fn allowed_origin(cors_origin: Option<String>) -> HeaderValue {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), LambdaError> {
     eprintln!("starting up...");
     //set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     // required to enable CloudWatch error logging by the runtime
@@ -155,7 +163,7 @@ async fn main() -> Result<(), Error> {
         .route("/health", get(|| async { "Hello, World!" }))
         .route("/puzzles", put(insert_puzzle))
         .route("/puzzles/:puzzle_id", get(get_puzzle))
-        .route("/puzzles/:puzzle_id/users", put(add_user))
+        .route("/puzzles/:puzzle_id/stamps", put(add_stamps))
         .layer(CorsLayer::new()
                .allow_methods(Any)
                .allow_origin(allowed_origin(conf.cors_origin))

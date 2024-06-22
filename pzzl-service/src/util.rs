@@ -8,6 +8,14 @@ use uuid::Uuid;
 use crate::types::PuzzleUserSerializer;
 use crate::types::{User, Puzzle, PuzzleUser};
 
+pub fn fill_owned(puzzle_user: &PuzzleUserSerializer, owned: bool) -> PuzzleUserSerializer {
+    let mut obj = puzzle_user.clone();
+    obj.user.owned = owned;
+
+    return obj;
+
+}
+
 pub fn fill_user_id(puzzle_user: &PuzzleUserSerializer) -> PuzzleUserSerializer {
     match puzzle_user.user.user_id {
         Some(_) => puzzle_user.clone(),
@@ -29,7 +37,7 @@ pub fn generate_string(length: usize) -> String {
     // Replace some characters with special characters
     let final_string: Vec<char> = alphanumeric_string.chars().collect();
 
-    final_string.into_iter().collect()
+    final_string.into_iter().collect::<String>().to_uppercase()
 }
 
 pub fn parse_users(result: &BatchGetItemOutput) -> Result<Vec<User>> {
