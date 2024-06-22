@@ -3,10 +3,11 @@ mod util;
 use serde_dynamo::to_item;
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::time::SystemTime;
 use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::{AttributeValue, KeysAndAttributes, TransactWriteItem, Put};
 use anyhow::{Error, Result};
-use crate::types::{User, Puzzle, PuzzleSerializer, PuzzleUserSerializer, PuzzleUser};
+use crate::types::{User, Puzzle, PuzzleSerializer, PuzzleUserSerializer, PuzzleUser, FillDates};
 
 #[derive(Clone)]
 pub struct PzzlService {
@@ -19,7 +20,7 @@ const MAX_PUZZLE_INSERT_TRYS: usize = 10;
 impl PzzlService {
 
     pub async fn add_user(&self, puzzle_id: String, puzzle_user: PuzzleUserSerializer) -> Result<PuzzleSerializer> {
-        let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
+        let mutable_puzzle_user = util::fill_user_id(&puzzle_user.fill_dates(None)); 
         let suser = to_item(&User::from(&mutable_puzzle_user))?;
         let puzzle_user_db = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
         let suser_puzzle = to_item(&puzzle_user_db)?;
@@ -44,7 +45,7 @@ impl PzzlService {
 
     // Function to create a new user
     pub async fn insert_puzzle(&self, puzzle: PuzzleSerializer) -> Result<PuzzleSerializer> {  
-        let mut mutable_puzzle = puzzle.clone();
+        let mut mutable_puzzle = puzzle.fill_dates(Some(SystemTime::now()));
         let mut transact_write_requests: Vec<TransactWriteItem> = vec![];
         let puzzle_id = util::generate_string(PUZZLE_PK_LENGTH);
         mutable_puzzle.puzzle_id = Some(puzzle_id.clone());
@@ -61,7 +62,7 @@ impl PzzlService {
                 ).build()
             );
 
-        for puzzle_user in &puzzle.users {
+        for puzzle_user in &mutable_puzzle.stamps {
             let mutable_puzzle_user = util::fill_user_id(&puzzle_user); 
             let suser = to_item(&User::from(&mutable_puzzle_user))?;
 
@@ -125,7 +126,7 @@ impl PzzlService {
         let puzzle_users_response: Vec<PuzzleUserSerializer> = types::make_puzzle_user_serializers(&users, &puzzle_users); 
 
         let mut puzzle_response: PuzzleSerializer = PuzzleSerializer::from(&puzzle);
-        puzzle_response.users = puzzle_users_response;
+        puzzle_response.stamps = puzzle_users_response;
         Ok(puzzle_response)
 
     }

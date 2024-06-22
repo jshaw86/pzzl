@@ -1,6 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::Client;
-use lambda_http::{run, tracing, Error};
+use lambda_http;
+use lambda_http::{tracing, Error};
 use axum::{
     debug_handler,
     routing::{get, put},
@@ -11,7 +12,7 @@ use axum::{
     http::header::CONTENT_TYPE,
 };
 use std::sync::Arc;
-use std::env::set_var;
+//use std::env::set_var;
 use serde::Serialize;
 use clap::Parser;
 use pzzl_service::{PzzlService, types::PuzzleUserSerializer};
@@ -129,7 +130,7 @@ fn allowed_origin(cors_origin: Option<String>) -> HeaderValue {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     eprintln!("starting up...");
-    set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
+    //set_var("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH", "true");
     // required to enable CloudWatch error logging by the runtime
 
     let conf = Config::parse();
@@ -170,7 +171,7 @@ async fn main() -> Result<(), Error> {
         }
         None => {
             eprintln!("running dynamo app...");
-            let resp = run(app).await;
+            let resp = lambda_http::run(app).await;
             eprintln!("dynamo app resp {:?}", resp);
         }
     }
