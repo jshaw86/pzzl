@@ -1,4 +1,4 @@
-data "aws_route_table" "main_vpc_route_tables" {
+data "aws_route_tables" "main_vpc_route_tables" {
   vpc_id = aws_vpc.main.id 
 }
 
@@ -18,7 +18,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
   service_name = "com.amazonaws.${var.region}.dynamodb"
   vpc_endpoint_type = "Gateway"
 
-  route_table_ids = data.aws_route_table.main_vpc_route_tables[*].id 
+  route_table_ids = data.aws_route_tables.main_vpc_route_tables.ids 
 
 }
 
@@ -116,7 +116,6 @@ resource "aws_lb_target_group" "lambda_lb_target_group" {
 
 resource "aws_lb_listener" "lambda_lb_80_listener" {
   load_balancer_arn = aws_lb.lambda_lb.arn
-  port              = "80"
   protocol          = "HTTP"
   default_action {
     type             = "forward"
@@ -135,7 +134,7 @@ resource "aws_lb_listener_rule" "static" {
 
   condition {
     path_pattern {
-      values = ["/health"]
+      values = ["/api"]
     }
   }
 }
