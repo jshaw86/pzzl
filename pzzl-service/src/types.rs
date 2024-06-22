@@ -21,7 +21,7 @@ fn rfc3339(st: &SystemTime) -> String {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PuzzleSerializer {
     pub puzzle_id: Option<String>,
-    pub name: String,
+    pub title: String,
     pub media: String,
     pub num_pieces: u16,
     pub inserted: Option<String>,
@@ -99,7 +99,7 @@ impl FillDates for PuzzleUserSerializer {
 pub struct Puzzle {
     pub pk: String,
     pub sk: String,
-    pub name: String,
+    pub title: String,
     pub media: String,
     pub num_pieces: u16,
     pub inserted: String,
@@ -247,7 +247,7 @@ impl From<&PuzzleSerializer> for Puzzle {
         Puzzle {
             pk: to_database_hash(PUZZLE_PREFIX, puzzle_id),
             sk: to_database_hash(PUZZLE_PREFIX, puzzle_id),
-            name: item.name.clone(),
+            title: item.title.clone(),
             media: item.media.clone(),
             num_pieces: item.num_pieces.clone(),
             inserted: item.inserted.clone().unwrap(),
@@ -260,7 +260,7 @@ impl From<&Puzzle> for PuzzleSerializer {
     fn from(item: &Puzzle) -> Self {
         PuzzleSerializer{
             puzzle_id: Some(from_database_hash(&item.pk)),
-            name: item.name.clone(),
+            title: item.title.clone(),
             media: item.media.clone(),
             num_pieces: item.num_pieces.clone(),
             inserted: Some(item.inserted.clone()),
