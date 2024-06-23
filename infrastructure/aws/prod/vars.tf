@@ -16,4 +16,17 @@ variable "bucket_name" {
   default = "media"
 }
 
+variable "env_name" {
+  type = string
+  default = "prod"
+}
+variable "repository_url" {
+  type = string
+}
+
+variable "image_version" {
+  type = string
+  default = "latest"
+}
+
 
