@@ -20,15 +20,15 @@
 ## Useful Curls
 - Insert first puzzle/user 
 `
- curl -v -H "content-type:application/json" -X PUT -d '{"num_pieces": 1, "title":"puzzle title", "media":"some media2", "stamps":[{"user":{"email":"thing email2", "name":"some user name2", "date": "2019-10-24T00:00:00", "owned":true}, "name":"stamp name", "missing_pieces": 4, "puzzlers": 2,"completed_time":1232131, "media":"dfsfsdfsd", "lat":63.31, "lng":32.80 }]}' http://localhost:8089/puzzles
+curl -v -H "content-type:application/json" -X PUT -d '{"num_pieces": 1, "title":"puzzle title", "name":"thing", "url":"puzzle media url", "users":[{"name":"pzzl user name", "email":"some puzzle user email"}], "lat":12.21, "lng":83.21, "completion_time":86868494, "stamps":[{"users":[{"email":"thing email2", "name":"some user name2"}], "name":"stamp name", "missing_pieces": 4, "puzzlers": 2,"completion_time":1232131, "urls":["dfsfsdfsd"], "lat":63.31, "lng":32.80 }]}' http://localhost:8089/puzzles
 `
 
 - Get puzzle 
-`curl -v -H "content-type:application/json" -X GET http://localhost:8089/puzzles/thing2
+`curl -v -H "content-type:application/json" -X GET http://localhost:8089/puzzles/<puzzle_id>
 ` 
 - Add Stamp 
 `
- curl -v -H "content-type:application/json" -X PUT -d '[{"user":{"email":"thing email2", "name":"some user name2", "date": "2019-10-24T00:00:00", "owned":true}, "name":"stamp name", "missing_pieces": 4, "puzzlers": 2,"completed_time":1232131, "media":"dfsfsdfsd", "lat":63.31, "lng":32.80 }]' http://localhost:8089/puzzles/KYVKBH97/stamps
+curl -v -H "content-type:application/json" -X PUT -d '[{"users":[{"email":"thing email2", "name":"some user name2"}], "name":"stamp name", "missing_pieces": 4, "puzzlers": 2,"completion_time":1232131, "media":"dfsfsdfsd", "lat":63.31, "lng":32.80, "urls":["dfssfdsfssd"] }]' http://localhost:8089/puzzles/<puzzle_id>/stamps
 `
 - Media presigned
 `

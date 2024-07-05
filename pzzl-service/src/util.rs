@@ -1,98 +1,72 @@
-use rand::distributions::Alphanumeric;
-use rand::distributions::DistString;
 use anyhow::{Error, Result};
+use std::collections::HashMap;
+use std::sync::Arc;
 use aws_sdk_dynamodb::operation::execute_statement::ExecuteStatementOutput;
-use aws_sdk_dynamodb::operation::batch_get_item::BatchGetItemOutput;
 use serde_dynamo::from_item;
-use uuid::Uuid;
-use crate::types::PuzzleUserSerializer;
-use crate::types::{User, Puzzle, PuzzleUser};
+use crate::types::{User, Puzzle, PuzzleStamp};
 
-
-
-pub fn fill_owned(puzzle_user: &PuzzleUserSerializer, owned: bool) -> PuzzleUserSerializer {
-    let mut obj = puzzle_user.clone();
-    obj.user.owned = owned;
-
-    return obj;
-
-}
-
-pub fn fill_user_id(puzzle_user: &PuzzleUserSerializer) -> PuzzleUserSerializer {
-    match puzzle_user.user.user_id {
-        Some(_) => puzzle_user.clone(),
-        None => {
-            let user_id = Uuid::new_v4().to_string();
-            let mut new_puzzle_user = puzzle_user.clone();
-            new_puzzle_user.user.user_id = Some(user_id);
-            new_puzzle_user
-        }
-    }
-}
-
-pub fn generate_string(length: usize) -> String {
-    let mut rng = rand::thread_rng();
-
-    // Generate alphanumeric characters
-    let alphanumeric_string: String = Alphanumeric.sample_string(&mut rng, length);
-
-    // Replace some characters with special characters
-    let final_string: Vec<char> = alphanumeric_string.chars().collect();
-
-    final_string.into_iter().collect::<String>().to_uppercase()
-}
-
-pub fn parse_users(result: &BatchGetItemOutput) -> Result<Vec<User>> {
-    let responses = result.responses();
-
-    if None == responses {
-        return Err(Error::msg("no responses"));
-    }
-    let puzzle_users = responses.unwrap().get("puzzles_users");
-
-    if None == puzzle_users {
-        return Err(Error::msg("no puzzle_users"));
-    }
-
-    let mut users: Vec<User> = vec![];
-    for item in puzzle_users.unwrap(){
-        let user: User = from_item(item.clone())?;
-            
-        users.push(user);
-
-    }
-
-    Ok(users)
-
-}
-
-pub fn parse_puzzle_puzzle_users(result: &ExecuteStatementOutput) -> Result<(Puzzle, Vec<PuzzleUser>)> {
-    let mut puzzle_users: Vec<PuzzleUser> = vec![];
-    let mut puzzle: Option<Puzzle> = None;
-    if let Some(items) = result.items.clone() {
+pub fn parse_users(result: &ExecuteStatementOutput) -> Result<Vec<Arc<User>>> {
+    let mut users: Vec<Arc<User>> = vec![];
+    if let Some(items) = &result.items {
         for item in items {
-            let puzzle_user_result: Result<PuzzleUser, serde_dynamo::Error> = from_item(item.clone());
-            let parsing_error: Result<(), serde_dynamo::Error> = match puzzle_user_result {
-                Ok(user) => Ok(puzzle_users.push(user)),
-                Err(_) => {
-                    let puzzle_result: Result<Puzzle, serde_dynamo::Error> = from_item(item);
-                    match puzzle_result {
-                        Ok(returned_puzzle) => {
-                            puzzle = Some(returned_puzzle);
-                            Ok(())
-                        },
-                        Err(err) => Err(err),
-                    }
-                }
-            };
+            let user: User = from_item(item.clone())?;
 
-            if let Err(serde_err) = parsing_error {
-                return Err(Error::from(serde_err));
-            }
+            users.push(Arc::new(user));
+
         }
 
     }
-    
-    return Ok((puzzle.unwrap(), puzzle_users));
+    Ok(users)
+}
+
+pub fn parse_puzzle_stamps_users(result: &ExecuteStatementOutput) -> Result<(Option<Arc<Puzzle>>, Vec<Arc<PuzzleStamp>>, Vec<Arc<User>>)> {
+    let mut puzzle_stamps: Vec<Arc<PuzzleStamp>> = vec![];
+    let mut puzzle_users: Vec<Arc<User>> = vec![];
+    let mut puzzle: Option<Arc<Puzzle>> = None;
+    if let Some(items) = &result.items {
+        for item in items {
+            let puzzle_stamp_result: Result<PuzzleStamp, serde_dynamo::Error> = from_item(item.clone());
+            if let Ok(stamp) = puzzle_stamp_result {
+                puzzle_stamps.push(Arc::new(stamp));
+                continue;
+            }
+
+            let user_result: Result<User, serde_dynamo::Error> = from_item(item.clone());
+            if let Ok(user) = user_result {
+                puzzle_users.push(Arc::new(user));
+                continue
+            }
+
+            let puzzle_result: Result<Puzzle, serde_dynamo::Error> = from_item(item.clone());
+            if let Ok(pzzl) =  puzzle_result {
+                puzzle = Some(Arc::new(pzzl));
+                continue
+            }
+             
+            return Err(Error::msg(format!("unable to parse item {:?}", item)));
+        }
+
+    }
+    return Ok((puzzle, puzzle_stamps, puzzle_users));
 
 }
+
+pub fn stamp_user_mapping(stamps: &Vec<Arc<PuzzleStamp>>, stamps_users: &Vec<Arc<User>>) -> HashMap<String, Vec<Arc<User>>> {
+    let mut users_stamps: HashMap<std::string::String, Vec<Arc<User>>> = HashMap::new();
+    for stamp in stamps {
+        for user in stamps_users {
+            match users_stamps.get_mut(&stamp.pk) {
+                Some(stamps) => {
+                    stamps.push(user.clone());
+                },
+                None => {
+                    users_stamps.insert(stamp.sk.clone(), vec![user.clone()]);
+                },
+            };
+        }
+    }
+
+    return users_stamps;
+
+}
+

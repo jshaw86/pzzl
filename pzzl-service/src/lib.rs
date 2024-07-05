@@ -3,14 +3,13 @@ mod util;
 use serde_dynamo::to_item;
 use std::sync::Arc;
 use std::collections::HashMap;
-use std::time::SystemTime;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_dynamodb::Client as DynamoClient;
-use aws_sdk_dynamodb::types::{AttributeValue, KeysAndAttributes, TransactWriteItem, Put};
+use aws_sdk_dynamodb::types::{AttributeValue, TransactWriteItem, Put};
 use anyhow::{Error, Result};
-use crate::types::{User, Puzzle, PuzzleSerializer, PuzzleUserSerializer, PuzzleUser, FillDates};
+use crate::types::{User, Puzzle, PuzzleDeserializer, PuzzleSerializer, PuzzleStampDeserializer, PuzzleStampSerializer, PuzzleStamp};
 use core::time::Duration;
 use uuid::Uuid;
 
@@ -20,7 +19,6 @@ pub struct PzzlService {
    pub s3_client: Arc<S3Client>
 }
 
-const PUZZLE_PK_LENGTH: usize = 6;
 const MAX_PUZZLE_INSERT_TRYS: usize = 10;
 
 impl PzzlService {
@@ -44,50 +42,51 @@ impl PzzlService {
         return Ok(presigned_req.uri().to_string());
     }
 
-    pub async fn add_stamps(&self, puzzle_id: String, puzzle_users: Vec<PuzzleUserSerializer>) -> Result<PuzzleSerializer> {
+    pub async fn add_stamps(&self, puzzle_id: String, stamps: Vec<PuzzleStampDeserializer>) -> Result<PuzzleSerializer> {
         let mut write_items = vec![];
-        for puzzle_user in puzzle_users {
-            let mutable_puzzle_user = util::fill_owned(&util::fill_user_id(&puzzle_user.fill_dates(Some(SystemTime::now()))), false);
-            let suser = to_item(&User::from(&mutable_puzzle_user))?;
-            let puzzle_user_db = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
-            let suser_puzzle = to_item(&puzzle_user_db)?;
-            write_items.push(
-                TransactWriteItem::builder()
-                .put(Put::builder().table_name("puzzles_users")
-                     .set_item(Some(suser_puzzle))
-                     .build()?
-                    ).build());
+        for stamp in stamps {
+            let stamp_response: PuzzleStampSerializer = (&stamp).into();
+            let db_stamp = to_item(&PuzzleStamp::from((&puzzle_id, &stamp_response)))?;
 
             write_items.push(
                 TransactWriteItem::builder()
                 .put(Put::builder().table_name("puzzles_users")
-                     .set_item(Some(suser))
+                     .set_item(Some(db_stamp))
                      .build()?
                     ).build());
+
+            for user in &stamp_response.users {
+                let db_user = to_item(&User::from((&stamp_response, user)))?;
+                write_items.push(
+                    TransactWriteItem::builder()
+                    .put(Put::builder().table_name("puzzles_users")
+                         .set_item(Some(db_user))
+                         .build()?
+                        ).build());
+
+            }
 
         }
 
         let _ = self.dynamo_client
-        .transact_write_items()
-        .set_transact_items(Some(write_items))
-                    .send().await?;
+            .transact_write_items()
+            .set_transact_items(Some(write_items))
+            .send().await?;
 
-        Ok(self.get_puzzle(puzzle_id).await?)
+       self.get_puzzle(puzzle_id).await
 
     }
 
     // Function to create a new user
-    pub async fn insert_puzzle(&self, puzzle: PuzzleSerializer) -> Result<PuzzleSerializer> {  
-        let mut mutable_puzzle = puzzle.fill_dates(Some(SystemTime::now()));
-
+    pub async fn insert_puzzle(&self, puzzle: PuzzleDeserializer) -> Result<PuzzleSerializer> {  
         loop {
-            let mut transact_write_requests: Vec<TransactWriteItem> = vec![];
-            let puzzle_id = util::generate_string(PUZZLE_PK_LENGTH);
-            mutable_puzzle.puzzle_id = Some(puzzle_id.clone());
+            let puzzle_response: PuzzleSerializer = (&puzzle).into(); 
+            let mut write_items: Vec<TransactWriteItem> = vec![];
+            let puzzle_id = &puzzle_response.puzzle_id;
 
-            let spuzzle = to_item(&Puzzle::from(&mutable_puzzle))?;
+            let spuzzle = to_item(&Puzzle::from(&puzzle_response))?;
 
-            transact_write_requests.push(
+            write_items.push(
                 TransactWriteItem::builder()
                 .put(
                     Put::builder().table_name("puzzles_users")
@@ -97,35 +96,48 @@ impl PzzlService {
                     ).build()
                 );
 
-            for puzzle_user in &mutable_puzzle.stamps {
-                let mutable_puzzle_user = util::fill_owned(&util::fill_user_id(&puzzle_user), true); 
-                let suser = to_item(&User::from(&mutable_puzzle_user))?;
+            for stamp_response in &puzzle_response.stamps {
+                let db_stamp = to_item(&PuzzleStamp::from((puzzle_id, stamp_response)))?;
 
-                transact_write_requests.push(
+                write_items.push(
                     TransactWriteItem::builder()
                     .put(Put::builder().table_name("puzzles_users")
-                         .set_item(Some(suser))
-                         .build()?).build());
+                         .set_item(Some(db_stamp))
+                         .build()?
+                        ).build());
 
-                let user_puzzle = types::make_puzzle_user(&mutable_puzzle_user, &puzzle_id);
-                let suser_puzzle = to_item(&user_puzzle)?;
+                for user in &stamp_response.users {
+                    let db_user = to_item(&User::from((stamp_response, user)))?;
+                    write_items.push(
+                        TransactWriteItem::builder()
+                        .put(Put::builder().table_name("puzzles_users")
+                             .set_item(Some(db_user))
+                             .build()?
+                            ).build());
 
-                transact_write_requests.push(
+                }
+
+            }
+
+            for user in &puzzle_response.users {
+                let db_user = to_item(&User::from((&puzzle_response, user)))?;
+                write_items.push(
                     TransactWriteItem::builder()
                     .put(Put::builder().table_name("puzzles_users")
-                         .set_item(Some(suser_puzzle))
-                         .build()?).build());
+                         .set_item(Some(db_user))
+                         .build()?
+                        ).build());
 
             }
 
             let mut insert_trys = 0;
             let transact_write_item = self.dynamo_client
                 .transact_write_items()
-                .set_transact_items(Some(transact_write_requests.clone()))
+                .set_transact_items(Some(write_items))
                 .send().await;
 
             if let Ok(_) = transact_write_item {
-                return Ok(self.get_puzzle(puzzle_id).await?);
+                return self.get_puzzle(puzzle_id.to_string()).await;
             }
 
             insert_trys += 1;
@@ -135,66 +147,56 @@ impl PzzlService {
             }
 
         }
-
+       
     }
     // Function to fetch a user's profile
     pub async fn get_puzzle(&self, puzzle_id: String) -> Result<PuzzleSerializer> {
-        let puzzle_users_result = self.get_puzzle_and_puzzle_users(&puzzle_id).await;
+        let (puzzle, puzzle_stamps, puzzle_users): (Arc<Puzzle>, Vec<Arc<PuzzleStamp>>, Vec<Arc<User>>) = self.get_puzzle_and_stamps(&puzzle_id).await?;
 
-        if let Err(err) = puzzle_users_result {
-            return Err(err);
-        }
+        let stamp_to_users = self.get_users_by_stamp_id(&puzzle_stamps).await?;
 
-        let (puzzle, puzzle_users) = puzzle_users_result.unwrap();
+        let puzzle_stamp_serializers: Vec<PuzzleStampSerializer> = puzzle_stamps.into_iter().map(|puzzle_stamp|  PuzzleStampSerializer::from((puzzle_stamp, &stamp_to_users))).collect();
 
-        let user_responses = self.get_users(&puzzle_users).await;
-
-        if let Err(err) = user_responses {
-            return Err(err);
-        }
-
-        let users: HashMap<String, User> = user_responses.unwrap().into_iter().map(|u| (u.pk.clone(), u)).collect();
-
-        let puzzle_users_response: Vec<PuzzleUserSerializer> = types::make_puzzle_user_serializers(&users, &puzzle_users); 
-
-        let mut puzzle_response: PuzzleSerializer = PuzzleSerializer::from(&puzzle);
-        puzzle_response.stamps = puzzle_users_response;
-        Ok(puzzle_response)
+        Ok(PuzzleSerializer::from((&puzzle, puzzle_stamp_serializers, &puzzle_users)))
 
     }
 
-    async fn get_puzzle_and_puzzle_users(&self, puzzle_id: &String) -> Result<(Puzzle, Vec<PuzzleUser>)>{
+    async fn get_puzzle_and_stamps(&self, puzzle_id: &String) -> Result<(Arc<Puzzle>, Vec<Arc<PuzzleStamp>>, Vec<Arc<User>>)>{
+        let db_attribute = AttributeValue::S(types::to_puzzle_pk(puzzle_id));
         let batch_result = self.dynamo_client 
             .execute_statement()
             .statement(format!(
                     r#"SELECT * FROM "{}" WHERE "{}" = ?"#,
                     "puzzles_users", "pk" 
                     ))
-            .set_parameters(Some(vec![AttributeValue::S(types::to_puzzle_pk(puzzle_id))]))
+            .set_parameters(Some(vec![db_attribute.clone()]))
             .send()
             .await?;
-
-        Ok(util::parse_puzzle_puzzle_users(&batch_result)?)
-
+        
+            match util::parse_puzzle_stamps_users(&batch_result)?{
+                (Some(puzzle), stamps, users) => Ok((puzzle, stamps, users)),
+                (None, _, _) => Err(Error::msg("No puzzle found")),
+            }
     }
 
-    async fn get_users(&self, puzzle_users: &Vec<PuzzleUser>) -> Result<Vec<User>> {
-        let db_user_pks: Vec<HashMap<String, AttributeValue>> = puzzle_users.into_iter()
-            .map(|u| HashMap::from([
-                                   ("pk".to_string(), AttributeValue::S(u.sk.clone())),
-                                   ("sk".to_string(), AttributeValue::S(u.sk.clone()))
-            ])).collect();
+    async fn get_users_by_stamp_id(&self, stamps: &Vec<Arc<PuzzleStamp>>) -> Result<HashMap<String, Vec<Arc<User>>>> {
+        let stamp_ids: Vec<AttributeValue> = stamps.into_iter().map(|stamp| AttributeValue::S(stamp.sk.to_string())).collect();
 
-        let users_query = KeysAndAttributes::builder()
-            .set_keys(Some(db_user_pks))
-            .build()?;
-
-        let items = self.dynamo_client.batch_get_item()
-            .request_items("puzzles_users",users_query)
+        let batch_result = self.dynamo_client 
+            .execute_statement()
+            .statement(format!(
+                    r#"SELECT * FROM "{}" WHERE "{}" IN [?]"#,
+                    "puzzles_users", "pk", 
+                    ))
+            .set_parameters(Some(stamp_ids))    
             .send()
             .await?;
 
-        return util::parse_users(&items);
+        let stamp_users: Vec<Arc<User>> = util::parse_users(&batch_result)?;
+
+        let result = util::stamp_user_mapping(&stamps, &stamp_users);
+
+        Ok(result)
 
     }
 }

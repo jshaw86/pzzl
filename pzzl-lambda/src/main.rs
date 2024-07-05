@@ -17,11 +17,9 @@ use std::sync::Arc;
 //use std::env::set_var;
 use serde::Serialize;
 use clap::Parser;
-use pzzl_service::{PzzlService, types::PuzzleUserSerializer};
+use pzzl_service::{PzzlService, types::{PuzzleStampDeserializer, PuzzleDeserializer}};
 use pzzl_service::types::PuzzleSerializer;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::trace::TraceLayer;
-
 
 const DOMAIN: &str = "https://puzzlepassport.com";
 const DEFAULT_BUCKET: &str = "media";
@@ -66,7 +64,7 @@ async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) ->
 }
 
 #[debug_handler]
-async fn add_stamps(State(state): State<AppState>, Path(puzzle_id): Path<String>, Json(puzzle_users): Json<Vec<PuzzleUserSerializer>>) -> Result<Json<PuzzleSerializer>, AppError> {
+async fn add_stamps(State(state): State<AppState>, Path(puzzle_id): Path<String>, Json(puzzle_users): Json<Vec<PuzzleStampDeserializer>>) -> Result<Json<PuzzleSerializer>, AppError> {
     if puzzle_users.len() > MAX_STAMPS_PER_REQ {
         return Err(AppError(AnyError::msg("too many stamps")));
     }
@@ -81,7 +79,7 @@ async fn add_stamps(State(state): State<AppState>, Path(puzzle_id): Path<String>
 
 // Function to create a new user
 #[debug_handler]
-async fn insert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleSerializer>) -> Result<Json<PuzzleSerializer>, AppError> {
+async fn insert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleDeserializer>) -> Result<Json<PuzzleSerializer>, AppError> {
     if puzzle.stamps.len() > MAX_STAMPS_PER_REQ {
         return Err(AppError(AnyError::msg("too many stamps")));
     }
@@ -155,7 +153,7 @@ async fn main() -> Result<(), LambdaError> {
     let conf = Config::parse();
 
     tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
+            .with_max_level(tracing::Level::ERROR)
             .init();
 
     eprintln!("initialize dynamo client...");
@@ -191,7 +189,6 @@ async fn main() -> Result<(), LambdaError> {
                .allow_methods(Any)
                .allow_origin(allowed_origin(conf.cors_origin))
                .allow_headers([CONTENT_TYPE]))
-        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
 
@@ -214,6 +211,7 @@ async fn main() -> Result<(), LambdaError> {
 // Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        eprintln!("error {:?}", self.0);
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse{
