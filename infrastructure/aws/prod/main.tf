@@ -221,6 +221,7 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
         Effect = "Allow"
         Action = [
           "dynamodb:GetItem",
+          "dynamodb:PartiQLSelect",
           "dynamodb:Query",
           "dynamodb:Scan",
           "dynamodb:PutItem",
