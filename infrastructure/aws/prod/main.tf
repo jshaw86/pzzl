@@ -1,6 +1,7 @@
 # Define the VPC
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
+  assign_generated_ipv6_cidr_block = true
   tags = {
     Name = "main-vpc"
   }
@@ -9,7 +10,8 @@ resource "aws_vpc" "main" {
 # Define public subnet
 resource "aws_subnet" "publica" {
   vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
+  ipv6_cidr_block      = cidrsubnet(aws_vpc.main.ipv6_cidr_block, 8, 0)
+  cidr_block           = cidrsubnet(aws_vpc.main.cidr_block, 4, 10)
   map_public_ip_on_launch = true
   availability_zone = "us-east-1a"
   tags = {
@@ -19,7 +21,8 @@ resource "aws_subnet" "publica" {
 
 resource "aws_subnet" "publicb" {
   vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.3.0/24"
+  ipv6_cidr_block      = cidrsubnet(aws_vpc.main.ipv6_cidr_block, 8, 1)
+  cidr_block           = cidrsubnet(aws_vpc.main.cidr_block, 4, 11)
   map_public_ip_on_launch = true
   availability_zone = "us-east-1b"
   tags = {
@@ -30,7 +33,8 @@ resource "aws_subnet" "publicb" {
 # Define private subnet
 resource "aws_subnet" "private" {
   vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.2.0/24"
+  ipv6_cidr_block      = cidrsubnet(aws_vpc.main.ipv6_cidr_block, 8, 3)
+  cidr_block           = cidrsubnet(aws_vpc.main.cidr_block, 4, 12)
   availability_zone = "us-east-1a"
   tags = {
     Name = "private-subnet"
@@ -45,21 +49,15 @@ resource "aws_internet_gateway" "gw" {
   }
 }
 
-# Create a NAT Gateway
-resource "aws_eip" "nat" {
-  domain = "vpc" 
-}
-
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.publica.id
-}
-
 # Create route tables
 resource "aws_route_table" "publica" {
   vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+  route {
+    ipv6_cidr_block = "::/0"
     gateway_id = aws_internet_gateway.gw.id
   }
   tags = {
@@ -74,19 +72,12 @@ resource "aws_route_table" "publicb" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.gw.id
   }
+  route {
+    ipv6_cidr_block = "::/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
   tags = {
     Name = "publica-rt"
-  }
-}
-
-resource "aws_route_table" "private" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat.id
-  }
-  tags = {
-    Name = "private-rt"
   }
 }
 
@@ -102,11 +93,6 @@ resource "aws_route_table_association" "publicb" {
   route_table_id = aws_route_table.publicb.id
 }
 
-resource "aws_route_table_association" "private" {
-  subnet_id      = aws_subnet.private.id
-  route_table_id = aws_route_table.private.id
-}
-
 #ALB
 # Create security group for ALB
 resource "aws_security_group" "alb_sg" {
@@ -117,11 +103,25 @@ resource "aws_security_group" "alb_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  ingress {
+    from_port = 80 
+    to_port = 80
+    protocol = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
   ingress {
     from_port   = 443 
     to_port     = 443 
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port = 443 
+    to_port = 443 
+    protocol = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
   }
   egress {
     from_port   = 0
@@ -129,6 +129,14 @@ resource "aws_security_group" "alb_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
   tags = {
     Name = "alb-sg"
   }
@@ -141,6 +149,7 @@ resource "aws_lb" "puzzlepassportlambda" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = [aws_subnet.publica.id, aws_subnet.publicb.id]
+  ip_address_type    = "dualstack"
 }
 
 # Create target group
