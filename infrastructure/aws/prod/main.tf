@@ -117,6 +117,12 @@ resource "aws_security_group" "alb_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  ingress {
+    from_port   = 443 
+    to_port     = 443 
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -129,7 +135,7 @@ resource "aws_security_group" "alb_sg" {
 }
 
 # Create ALB
-resource "aws_lb" "my_alb" {
+resource "aws_lb" "puzzlepassportlambda" {
   name               = "my-alb"
   internal           = false
   load_balancer_type = "application"
@@ -145,9 +151,27 @@ resource "aws_lb_target_group" "lambda_tg" {
 
 # Create listener
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.my_alb.arn
+  load_balancer_arn = aws_lb.puzzlepassportlambda.arn
   port              = "80"
   protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lambda_tg.arn
+  }
+}
+
+data "aws_acm_certificate" "tossl" {
+  domain   = "puzzlepassport.com"
+  types       = ["AMAZON_ISSUED"]
+  most_recent = true
+}
+
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.puzzlepassportlambda.arn
+  port              = "443"
+  protocol          = "HTTPS"
+  certificate_arn   = data.aws_acm_certificate.tossl.arn
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.lambda_tg.arn
@@ -238,4 +262,20 @@ resource "aws_iam_policy" "lambda_dynamodb_policy" {
 resource "aws_iam_role_policy_attachment" "lambda_dynamodb_attach" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = aws_iam_policy.lambda_dynamodb_policy.arn
+}
+
+data "aws_route53_zone" "puzzlepassport" {
+    name         = "puzzlepassport.com." 
+}
+
+resource "aws_route53_record" "alias_route53_record" {
+  zone_id = data.aws_route53_zone.puzzlepassport.zone_id # Replace with your zone ID
+  name    = "backend.puzzlepassport.com" # Replace with your name/domain/subdomain
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.puzzlepassportlambda.dns_name
+    zone_id                = aws_lb.puzzlepassportlambda.zone_id
+    evaluate_target_health = true
+  }
 }
