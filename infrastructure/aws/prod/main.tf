@@ -268,7 +268,7 @@ data "aws_route53_zone" "puzzlepassport" {
     name         = "puzzlepassport.com." 
 }
 
-resource "aws_route53_record" "alias_route53_record" {
+resource "aws_route53_record" "alb_backend_alias_record" {
   zone_id = data.aws_route53_zone.puzzlepassport.zone_id # Replace with your zone ID
   name    = "backend.puzzlepassport.com" # Replace with your name/domain/subdomain
   type    = "A"
@@ -278,4 +278,22 @@ resource "aws_route53_record" "alias_route53_record" {
     zone_id                = aws_lb.puzzlepassportlambda.zone_id
     evaluate_target_health = true
   }
+}
+
+resource "aws_route53_record" "vercel_dns_cname_record" {
+  zone_id = data.aws_route53_zone.puzzlepassport.zone_id # Replace with your zone ID
+  name    = "www.puzzlepassport.com" # Replace with your name/domain/subdomain
+  type    = "CNAME"
+  ttl = 900 
+  records        = [var.vercel_cname_dns]
+
+}
+
+resource "aws_route53_record" "vercel_apex_a_record" {
+  zone_id = data.aws_route53_zone.puzzlepassport.zone_id # Replace with your zone ID
+  name    = "puzzlepassport.com" # Replace with your name/domain/subdomain
+  type    = "A"
+  ttl = 300
+  records = [var.vercel_ip]
+
 }

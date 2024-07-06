@@ -29,4 +29,12 @@ variable "image_version" {
   default = "latest"
 }
 
+variable "vercel_ip" {
+  type = string
+  default = "76.76.21.21"
+}
 
+variable "vercel_cname_dns" {
+  type = string
+  default = "cname.vercel-dns.com"
+}
