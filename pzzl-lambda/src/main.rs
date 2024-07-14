@@ -19,6 +19,7 @@ use serde::Serialize;
 use clap::Parser;
 use pzzl_service::{PzzlService, types::{PuzzleStampDeserializer, PuzzleDeserializer}};
 use pzzl_service::types::PuzzleSerializer;
+use pzzl_service::db::PzzlDatabase;
 use tower_http::cors::{Any, CorsLayer};
 
 const DOMAIN: &str = "https://puzzlepassport.com";
@@ -64,17 +65,21 @@ async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) ->
 }
 
 #[debug_handler]
-async fn add_stamps(State(state): State<AppState>, Path(puzzle_id): Path<String>, Json(puzzle_users): Json<Vec<PuzzleStampDeserializer>>) -> Result<Json<PuzzleSerializer>, AppError> {
+async fn add_stamps(
+    State(state): State<AppState>,
+    Path(puzzle_id): Path<String>,
+    Json(puzzle_users): Json<Vec<PuzzleStampDeserializer>>
+) -> Result<Json<PuzzleSerializer>, AppError> {
     if puzzle_users.len() > MAX_STAMPS_PER_REQ {
         return Err(AppError(AnyError::msg("too many stamps")));
     }
-    let puzzle_result = state.puzzle_service.add_stamps(puzzle_id, puzzle_users).await;
+    let puzzle_users_refs: Vec<&PuzzleStampDeserializer> = puzzle_users.iter().collect();
+    let puzzle_result = state.puzzle_service.add_stamps(puzzle_id.as_str(), puzzle_users_refs).await;
 
-    return match puzzle_result {
+    match puzzle_result {
         Ok(puzzle) => Ok(Json(puzzle)),
         Err(err) => Err(AppError(err)),
-    };
-
+    }
 }
 
 // Function to create a new user
@@ -83,7 +88,7 @@ async fn insert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleD
     if puzzle.stamps.len() > MAX_STAMPS_PER_REQ {
         return Err(AppError(AnyError::msg("too many stamps")));
     }
-    let puzzle_result = state.puzzle_service.insert_puzzle(puzzle).await;
+    let puzzle_result = state.puzzle_service.insert_puzzle(&puzzle).await;
 
     return match puzzle_result {
         Ok(puzzle) => Ok(Json(puzzle)),
@@ -95,7 +100,7 @@ async fn insert_puzzle(State(state): State<AppState>, Json(puzzle): Json<PuzzleD
 // Function to fetch a user's profile
 #[debug_handler]
 async fn get_puzzle(State(state): State<AppState>, Path(puzzle_id): Path<String>) -> Result<Json<PuzzleSerializer>, AppError> {
-    let puzzle_result = state.puzzle_service.get_puzzle(puzzle_id).await;
+    let puzzle_result = state.puzzle_service.get_puzzle(puzzle_id.as_str()).await;
 
     return match puzzle_result {
         Ok(puzzle) => Ok(Json(puzzle)),
@@ -109,7 +114,6 @@ async fn dynamo_client(aws_endpoint: &Option<String> ) -> DynamoClient {
                 .endpoint_url(url)
                 .load().await,
         None => {
-            eprintln!("loading dynamo from env...");
             aws_config::load_from_env().await
         }
     };
@@ -125,7 +129,6 @@ async fn s3_client(aws_endpoint: &Option<String> ) -> S3Client {
                 .endpoint_url(url)
                 .load().await,
         None => {
-            eprintln!("loading dynamo from env...");
             aws_config::load_from_env().await
         }
     };
@@ -171,8 +174,8 @@ async fn main() -> Result<(), LambdaError> {
 
     let state = AppState{
         puzzle_service: PzzlService { 
-            dynamo_client: Arc::new(dynamo_client), 
-                s3_client: Arc::new(s3_client),
+            database: PzzlDatabase { client: Arc::new(dynamo_client) }, 
+            s3_client: Arc::new(s3_client),
 
         },
         bucket_name: bucket_name.unwrap(),
@@ -211,7 +214,6 @@ async fn main() -> Result<(), LambdaError> {
 // Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        eprintln!("error {:?}", self.0);
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse{
