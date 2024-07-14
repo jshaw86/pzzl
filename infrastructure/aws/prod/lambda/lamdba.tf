@@ -55,3 +55,11 @@ resource "aws_lb_target_group_attachment" "lambda_attachment" {
   target_group_arn = data.aws_lb_target_group.lambda_tg.arn
   target_id        = aws_lambda_function.pzzl_lambda_function.arn
 }
+
+/*
+resource "aws_lambda_provisioned_concurrency_config" "lambda_concurrency" {
+  function_name                     = aws_lambda_function.pzzl_lambda_function.function_name
+  provisioned_concurrent_executions = 1
+  qualifier                         = aws_lambda_function.pzzl_lambda_function.version
+}
+*/
