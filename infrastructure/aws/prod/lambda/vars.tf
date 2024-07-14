@@ -11,17 +11,13 @@ variable "secret_key" {
   type    = string
 }
 
-variable "bucket_name" {
+variable "env_name" {
   type = string
-  default = "media"
+  default = "prod"
 }
 
-variable "vercel_ip" {
+variable "image_version" {
   type = string
-  default = "76.76.21.21"
+  default = "1.0.0"
 }
 
-variable "vercel_cname_dns" {
-  type = string
-  default = "cname.vercel-dns.com"
-}

@@ -37,7 +37,7 @@ resource "aws_subnet" "private" {
   cidr_block           = cidrsubnet(aws_vpc.main.cidr_block, 4, 12)
   availability_zone = "us-east-1a"
   tags = {
-    Name = "private-subnet"
+    Name = "private-subnet" // used in the lambda to lookup
   }
 }
 
@@ -138,7 +138,7 @@ resource "aws_security_group" "alb_sg" {
   }
 
   tags = {
-    Name = "alb-sg"
+    Name = "alb-sg" // used in the lambda to lookup
   }
 }
 
@@ -190,7 +190,7 @@ resource "aws_lb_listener" "https" {
 # Lambda
 # Create IAM role for Lambda
 resource "aws_iam_role" "lambda_role" {
-  name = "lambda_role"
+  name = "lambda_role" // used in lambda to lookup
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -209,37 +209,7 @@ resource "aws_iam_role_policy_attachment" "lambda_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Create Lambda function
-resource "aws_lambda_function" "pzzl_lambda_function" {
-  function_name = "pzzl-server-${var.env_name}"
-  timeout       = 90 # seconds
-  image_uri     = "${var.repository_url}:${var.image_version}"
-  package_type  = "Image"
-  architectures    = ["arm64"]
 
-  vpc_config {
-    subnet_ids         = [aws_subnet.private.id]
-    security_group_ids = [aws_security_group.alb_sg.id]
-  }
-
-  role = aws_iam_role.lambda_role.arn
-
-}
-
-# Grant ALB permission to invoke Lambda
-resource "aws_lambda_permission" "alb_invocation" {
-  statement_id  = "AllowExecutionFromALB"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.pzzl_lambda_function.function_name
-  principal     = "elasticloadbalancing.amazonaws.com"
-  source_arn    = aws_lb_target_group.lambda_tg.arn
-}
-
-# Attach Lambda to target group
-resource "aws_lb_target_group_attachment" "lambda_attachment" {
-  target_group_arn = aws_lb_target_group.lambda_tg.arn
-  target_id        = aws_lambda_function.pzzl_lambda_function.arn
-}
 
 # Dynamo Lambda configuration
 data "aws_caller_identity" "current" {}
