@@ -26,7 +26,7 @@ variable "repository_url" {
 
 variable "image_version" {
   type = string
-  default = "latest"
+  default = "1.0.0"
 }
 
 variable "vercel_ip" {
