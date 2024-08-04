@@ -180,7 +180,10 @@ impl PzzlDatabase {
         let (possible_puzzle, puzzle_stamps, puzzle_users) = PzzlDatabase::parse_puzzle_stamps_users(db_puzzle_stamps)?;
 
         if let Some(puzzle) = possible_puzzle {
-            let db_stamp_users = self.get_users_by_stamp_id(&puzzle_stamps).await?;
+            let db_stamp_users = match puzzle_stamps.len() {
+                0 => vec![],
+                _ => self.get_users_by_stamp_id(&puzzle_stamps).await?,
+            };
             let stamp_users = PzzlDatabase::parse_users(db_stamp_users)?;
             let stamp_to_users: HashMap<String, Vec<User>> = PzzlDatabase::stamp_user_mapping(&puzzle_stamps, stamp_users);
 
