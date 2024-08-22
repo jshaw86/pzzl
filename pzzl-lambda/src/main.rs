@@ -17,7 +17,7 @@ use std::sync::Arc;
 //use std::env::set_var;
 use serde::Serialize;
 use clap::Parser;
-use pzzl_service::{PzzlService, types::{PuzzleStampDeserializer, PuzzleDeserializer}};
+use pzzl_service::{PzzlService, types::{PuzzleStampDeserializer, PuzzleDeserializer, MediaSerializer}};
 use pzzl_service::types::PuzzleSerializer;
 use pzzl_service::db::PzzlDatabase;
 use tower_http::cors::{Any, CorsLayer};
@@ -55,11 +55,11 @@ struct AppJson<T>(T);
 struct AppError(anyhow::Error);
 
 #[debug_handler]
-async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) -> Result<String, AppError> {
+async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) -> Result<Json<MediaSerializer>, AppError> {
     let result = state.puzzle_service.get_media_url(prefix, state.bucket_name).await;
 
     match result {
-        Ok(s) => Ok(s),
+        Ok(s) => Ok(Json(s)),
         Err(e) => Err(AppError(e)),
     }
 }

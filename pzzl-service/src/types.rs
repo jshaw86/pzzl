@@ -6,6 +6,13 @@ use crate::util;
 const PUZZLE_PK_LENGTH: usize = 6;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MediaSerializer {
+    pub uri: String,
+    pub method: String,
+    pub headers: Vec<(String, String)>, 
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PuzzleDeserializer {
     pub puzzle_id: Option<String>,
     pub title: String,

@@ -6,7 +6,7 @@ use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::presigning::PresigningConfig;
 use anyhow::Result;
-use crate::types::{PuzzleDeserializer, PuzzleSerializer, PuzzleStampDeserializer};
+use crate::types::{PuzzleDeserializer, PuzzleSerializer, PuzzleStampDeserializer, MediaSerializer};
 use core::time::Duration;
 use uuid::Uuid;
 
@@ -19,7 +19,7 @@ pub struct PzzlService {
 
 impl PzzlService {
 
-    pub async fn get_media_url(&self, prefix: String, bucket_name: String) -> Result<String> {
+    pub async fn get_media_url(&self, prefix: String, bucket_name: String) -> Result<MediaSerializer> {
         let expiration = Duration::from_secs(15 * 60);
         let object_key = format!("{}-{}", prefix, Uuid::new_v4().to_string()); 
 
@@ -35,7 +35,11 @@ impl PzzlService {
 
         // Generate the presigned URL
         let presigned_req = req.presigned(presigning_config).await?;
-        return Ok(presigned_req.uri().to_string());
+        Ok(MediaSerializer {
+            uri: presigned_req.uri().to_string(),
+            method: presigned_req.method().to_string(),
+            headers: presigned_req.headers().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        })
     }
 
   
