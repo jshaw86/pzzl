@@ -2,6 +2,22 @@ resource "aws_s3_bucket" "media" {
   bucket = var.bucket_name 
 }
 
+resource "aws_s3_bucket_cors_configuration" "media" {
+  bucket = aws_s3_bucket.media.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "POST"]
+    allowed_origins = ["https://puzzlepassport.com"]
+    max_age_seconds = 3000
+  }
+
+  cors_rule {
+    allowed_methods = ["GET"]
+    allowed_origins = ["https://puzzlepassport.com"]
+  }
+}
+
 resource "aws_s3_bucket_ownership_controls" "media" {
   bucket = aws_s3_bucket.media.id
   rule {
