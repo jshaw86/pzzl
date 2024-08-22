@@ -56,6 +56,7 @@ struct PuzzleStamp <'response>{
     pub pk: Cow<'response, str>,
     pub sk: Cow<'response, str>,
     pub name: Option<Cow<'response, str>>, 
+    pub num_puzzlers: u16,
     pub missing_pieces: u16,
     pub completion_time: Option<u64>,
     pub urls: Vec<Cow<'response, str>>,
@@ -329,6 +330,7 @@ impl<'response> From<(&'response str, &'response PuzzleStampSerializer)> for  Pu
                 Some(name) => Some(Cow::Borrowed(name)), 
                 None => None 
             },
+            num_puzzlers: item.num_puzzlers,
             missing_pieces: item.missing_pieces,
             completion_time: item.completion_time,
             urls: item.urls.iter().map(|url| Cow::Borrowed(&**url)).collect(),
@@ -378,6 +380,7 @@ impl<'response> From<(PuzzleStamp<'response>, Vec<UserSerializer>)> for PuzzleSt
             name: stamp.name.map(String::from), 
             missing_pieces: stamp.missing_pieces,
             completion_time: stamp.completion_time,
+            num_puzzlers: stamp.num_puzzlers,
             urls: stamp.urls.into_iter().map(|url| url.to_string()).collect(),
             lat: stamp.lat,
             lng: stamp.lng,

@@ -53,6 +53,7 @@ pub struct UserSerializer {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PuzzleStampDeserializer{
     pub users: Vec<UserDeserializer>,
+    pub num_puzzlers: u16,
     pub name: Option<String>, 
     pub missing_pieces: u16,
     pub completion_time: Option<u64>,
@@ -66,6 +67,7 @@ pub struct PuzzleStampSerializer{
     pub stamp_id: String,
     pub users: Vec<UserSerializer>,
     pub name: Option<String>, 
+    pub num_puzzlers: u16,
     pub missing_pieces: u16,
     pub completion_time: Option<u64>,
     pub urls: Vec<String>, // max six
@@ -103,6 +105,7 @@ impl<'request> From<&'request PuzzleStampDeserializer> for PuzzleStampSerializer
             stamp_id: Uuid::new_v4().to_string().into(),
             users: user_deserializer_to_serializer(&item.users),
             name: item.name.clone().map(String::from), 
+            num_puzzlers: item.num_puzzlers,
             missing_pieces: item.missing_pieces,
             completion_time: item.completion_time,
             urls: item.urls.iter().map(|url| url.to_string()).collect(),
