@@ -3,7 +3,6 @@ pub mod db;
 mod util;
 use std::sync::Arc;
 use aws_sdk_s3::Client as S3Client;
-use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::presigning::PresigningConfig;
 use anyhow::Result;
 use crate::types::{PuzzleDeserializer, PuzzleSerializer, PuzzleStampDeserializer, MediaSerializer};
@@ -23,18 +22,19 @@ impl PzzlService {
         let expiration = Duration::from_secs(15 * 60);
         let object_key = format!("{}-{}", prefix, Uuid::new_v4().to_string()); 
 
-        // Create a PutObjectRequest
-        let req = self.s3_client
-            .put_object()
-            .bucket(bucket_name)
-            .key(object_key)
-            .body(ByteStream::from_static(b""));
 
-        // Configure the presigned request with expiration time
-        let presigning_config = PresigningConfig::expires_in(expiration)?;
+         let presigned_req = self.s3_client
+        .put_object()
+        .bucket(bucket_name)
+        .key(object_key)
+        .content_type("application/png") // Set the desired content type
+        .presigned(
+            PresigningConfig::builder()
+                .expires_in(expiration) // Expiration time for the presigned URL
+                .build()?
+        )
+        .await?;
 
-        // Generate the presigned URL
-        let presigned_req = req.presigned(presigning_config).await?;
         Ok(MediaSerializer {
             uri: presigned_req.uri().to_string(),
             method: presigned_req.method().to_string(),
