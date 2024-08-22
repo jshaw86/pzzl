@@ -23,7 +23,7 @@ use pzzl_service::db::PzzlDatabase;
 use tower_http::cors::{Any, CorsLayer};
 
 const DOMAIN: &str = "https://puzzlepassport.com";
-const DEFAULT_BUCKET: &str = "media";
+const DEFAULT_BUCKET: &str = "puzzle-passport-media";
 const MAX_STAMPS_PER_REQ: usize = 4;
 
 #[derive(Debug, Parser)]
