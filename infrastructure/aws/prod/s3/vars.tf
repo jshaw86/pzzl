@@ -18,7 +18,7 @@ variable "secret_key" {
 
 variable "bucket_name" {
   type = string
-  default = "media"
+  default = "puzzle-passport-media"
 }
 
 

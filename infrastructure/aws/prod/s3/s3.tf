@@ -43,3 +43,27 @@ resource "aws_s3_bucket_acl" "media" {
   bucket = aws_s3_bucket.media.id
   acl    = "public-read"
 }
+
+data "aws_iam_policy_document" "media" {
+  policy_id = "s3_bucket_media"
+
+  statement {
+    actions = [
+      "s3:GetObject"
+    ]
+    effect = "Allow"
+    resources = [
+      "${aws_s3_bucket.media.arn}/*"
+    ]
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    sid = "S3MediaPublicAccess"
+  }
+}
+
+resource "aws_s3_bucket_policy" "media" {
+  bucket = aws_s3_bucket.media.id
+  policy = data.aws_iam_policy_document.media.json
+}

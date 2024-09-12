@@ -18,6 +18,6 @@ variable "env_name" {
 
 variable "image_version" {
   type = string
-  default = "1.4.0"
+  default = "1.6.0"
 }
 

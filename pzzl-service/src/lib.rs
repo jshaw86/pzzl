@@ -18,16 +18,15 @@ pub struct PzzlService {
 
 impl PzzlService {
 
-    pub async fn get_media_url(&self, prefix: String, bucket_name: String) -> Result<MediaSerializer> {
+    pub async fn get_media_url(&self, prefix: String, bucket_name: String, content_type: String) -> Result<MediaSerializer> {
         let expiration = Duration::from_secs(15 * 60);
         let object_key = format!("{}-{}", prefix, Uuid::new_v4().to_string()); 
-
 
          let presigned_req = self.s3_client
         .put_object()
         .bucket(bucket_name)
         .key(object_key)
-        .content_type("application/png") // Set the desired content type
+        .content_type(content_type) // Set the desired content type
         .presigned(
             PresigningConfig::builder()
                 .expires_in(expiration) // Expiration time for the presigned URL

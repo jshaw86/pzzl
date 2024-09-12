@@ -7,7 +7,7 @@ use lambda_http::{tracing, Error as LambdaError};
 use axum::{
     debug_handler,
     routing::{get, put},
-    extract::{Json, Path, FromRequest, State},
+    extract::{Json, Path, FromRequest, State, Query},
     Router,
     response::{IntoResponse, Response},
     http::{HeaderValue, StatusCode},
@@ -15,7 +15,7 @@ use axum::{
 };
 use std::sync::Arc;
 //use std::env::set_var;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use clap::Parser;
 use pzzl_service::{PzzlService, types::{PuzzleStampDeserializer, PuzzleDeserializer, MediaSerializer}};
 use pzzl_service::types::PuzzleSerializer;
@@ -48,6 +48,11 @@ struct ErrorResponse {
     status_code: u16,
 }
 
+#[derive(Deserialize)]
+struct MediaQueryParams {
+    content_type: String,
+}
+
 #[derive(FromRequest)]
 #[from_request(via(axum::Json), rejection(AppError))]
 struct AppJson<T>(T);
@@ -55,8 +60,8 @@ struct AppJson<T>(T);
 struct AppError(anyhow::Error);
 
 #[debug_handler]
-async fn media_url(State(state): State<AppState>, Path(prefix): Path<String>) -> Result<Json<MediaSerializer>, AppError> {
-    let result = state.puzzle_service.get_media_url(prefix, state.bucket_name).await;
+async fn media_url(State(state): State<AppState>, Query(query_params): Query<MediaQueryParams>, Path(prefix): Path<String>) -> Result<Json<MediaSerializer>, AppError> {
+    let result = state.puzzle_service.get_media_url(prefix, state.bucket_name, query_params.content_type).await;
 
     match result {
         Ok(s) => Ok(Json(s)),
