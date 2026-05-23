@@ -384,8 +384,8 @@ impl<'response> From<(PuzzleStamp<'response>, Vec<UserSerializer>)> for PuzzleSt
             urls: stamp.urls.into_iter().map(|url| url.to_string()).collect(),
             lat: stamp.lat,
             lng: stamp.lng,
-            inserted: util::rfc3339(&SystemTime::now()).into(),
-            updated: util::rfc3339(&SystemTime::now()).into(),
+            inserted: stamp.inserted.to_string(),
+            updated: stamp.updated.to_string(),
         }
     }
 }
@@ -418,8 +418,8 @@ impl<'response> From<User<'response>> for UserSerializer {
             user_id: Uuid::new_v4().to_string().into(),
             email: item.email.to_string(),
             name: item.name.to_string(), 
-            inserted: util::rfc3339(&SystemTime::now()).into(),
-            updated: util::rfc3339(&SystemTime::now()).into(),
+            inserted: item.inserted.to_string(),
+            updated: item.updated.to_string(),
 
         }
     }

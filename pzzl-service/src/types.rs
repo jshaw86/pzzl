@@ -24,6 +24,8 @@ pub struct PuzzleDeserializer {
     pub lat: f32,
     pub lng: f32,
     pub stamps: Vec<PuzzleStampDeserializer>,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -46,6 +48,8 @@ pub struct PuzzleSerializer {
 pub struct UserDeserializer {
     pub email: String,
     pub name: String,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -67,6 +71,8 @@ pub struct PuzzleStampDeserializer{
     pub urls: Vec<String>, // max six
     pub lat: f32,
     pub lng: f32,
+    pub inserted: Option<String>,
+    pub updated: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -98,8 +104,8 @@ impl<'request> From<&'request PuzzleDeserializer> for PuzzleSerializer
             lat: item.lat,
             lng: item.lng,
             stamps: puzzle_stamp_deserializer_to_serializer(&item.stamps),
-            inserted: util::rfc3339(&SystemTime::now()).into(),
-            updated: util::rfc3339(&SystemTime::now()).into(),
+            inserted: option_date_string_to_string(&item.inserted),
+            updated: option_date_string_to_string(&item.updated),
 
         }
     }
@@ -118,8 +124,8 @@ impl<'request> From<&'request PuzzleStampDeserializer> for PuzzleStampSerializer
             urls: item.urls.iter().map(|url| url.to_string()).collect(),
             lat: item.lat,
             lng: item.lng,
-            inserted: util::rfc3339(&SystemTime::now()).into(),
-            updated: util::rfc3339(&SystemTime::now()).into(),
+            inserted: option_date_string_to_string(&item.inserted),
+            updated: option_date_string_to_string(&item.updated),
         }
     }
 }
@@ -133,10 +139,16 @@ impl<'request> From<&'request UserDeserializer> for UserSerializer
             user_id: Uuid::new_v4().to_string().into(),
             email: item.email.to_string(),
             name: item.name.to_string(), 
-            inserted: util::rfc3339(&SystemTime::now()).into(),
-            updated: util::rfc3339(&SystemTime::now()).into(),
-
+            inserted: option_date_string_to_string(&item.inserted),
+            updated: option_date_string_to_string(&item.updated),
         }
+    }
+}
+
+fn option_date_string_to_string<'request>(datetime: &'request Option<String>) -> String {
+    match datetime {
+        Some(dt) => dt.to_string(),
+        None => util::rfc3339(&SystemTime::now()),
     }
 }
 
